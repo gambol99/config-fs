@@ -1,5 +1,7 @@
 
 config-fs.iml
+stage/config-fs
+config-fs
 .idea/
 logs/
 mount/
