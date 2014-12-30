@@ -34,7 +34,7 @@ func main() {
 	}
 	glog.Infof("Starting the config synchronization")
 	if err := storefs.Synchronize(); err != nil {
-		glog.Errorf("Failed to the synchronize the configuration, error: %s", err )
+		glog.Errorf("Failed to the synchronize the configuration, error: %s", err)
 		os.Exit(1)
 	}
 	glog.Infof("Waiting for signal to quit")
