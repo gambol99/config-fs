@@ -29,7 +29,7 @@ var (
 var InvalidProviderErr = errors.New("Invalid provider name, does not exist")
 
 func init() {
-	discovery_url = flag.String("-discovery", "", "the service discovery backend being used")
+	discovery_url = flag.String("discovery", "", "the service discovery backend being used")
 }
 
 /*
