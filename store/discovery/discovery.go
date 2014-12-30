@@ -18,7 +18,7 @@ import (
 	"flag"
 	"sync"
 
-	"github.com/gambol99/config-store/discovery/agent"
+	"github.com/gambol99/config-fs/store/discovery/agent"
 	"github.com/golang/glog"
 )
 
@@ -52,7 +52,7 @@ type Discovery interface {
 type DiscoveryService struct {
 	sync.RWMutex
 	/* A map of the providers */
-	Providers map[string]DiscoveryAgent
+	Providers map[string]agent.DiscoveryAgent
 	/* A map of stop channels for the service watches */
 	StopChannels map[string]chan bool
 }

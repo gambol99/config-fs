@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gambol99/config-fs/store/kv"
+	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/golang/glog"
 )
 
@@ -47,6 +48,8 @@ type ConfigurationStore struct {
 	KV kv.KVStore
 	/* fs implementation */
 	FileFS StoreFileSystem
+	/* discovery agent */
+	Agent  discovery.Discovery
 	/* the shutdown signal */
 	Shutdown chan bool
 }

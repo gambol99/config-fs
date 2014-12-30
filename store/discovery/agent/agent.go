@@ -39,7 +39,7 @@ type Service struct {
 	/* the ip address of the service */
 	Address string
 	/* the port the service is running on */
-	Port uint
+	Port int
 	/* any tags related to the service */
 	Tags []string
 }
