@@ -42,11 +42,11 @@ func NewEtcdStoreClient(uri *url.URL) (KVStore, error) {
 	}
 	glog.Infof("Creating a Etcd Client, hosts: %s", store.Hosts)
 	store.Client = etcd.NewClient(store.Hosts)
-	store.Client.SetConsistency( etcd.WEAK_CONSISTENCY )
+	store.Client.SetConsistency(etcd.WEAK_CONSISTENCY)
 	return store, nil
 }
 
-func (r *EtcdStoreClient) Get(key string) (*Node,error) {
+func (r *EtcdStoreClient) Get(key string) (*Node, error) {
 	if !strings.HasPrefix(key, "/") {
 		key = "/" + key
 	}
@@ -61,7 +61,7 @@ func (r *EtcdStoreClient) Get(key string) (*Node,error) {
 
 func (r *EtcdStoreClient) GetRaw(key string) (response *etcd.Response, err error) {
 	Verbose("GetRaw() key: %s", key)
-	response, err = r.Client.Get( key, false, false)
+	response, err = r.Client.Get(key, false, false)
 	if err != nil {
 		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 		return nil, err
@@ -107,10 +107,10 @@ func (r *EtcdStoreClient) Mkdir(path string) error {
 }
 
 func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
-	if !strings.HasPrefix(path, "/" ) || path == "" {
+	if !strings.HasPrefix(path, "/") || path == "" {
 		path = "/" + path
 	}
-	Verbose("List() path: %s", path )
+	Verbose("List() path: %s", path)
 	if response, err := r.GetRaw(path); err != nil {
 		glog.Errorf("List() failed to get path: %s, error: %s", path, err)
 		return nil, err
@@ -121,13 +121,13 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 			return nil, InvalidDirectoryErr
 		}
 		for _, item := range response.Node.Nodes {
-			list = append(list, r.CreateNode( item ) )
+			list = append(list, r.CreateNode(item))
 		}
 		return list, nil
 	}
 }
 
-func (r *EtcdStoreClient) Watch(key string, updateChannel chan NodeChange) (chan bool,error) {
+func (r *EtcdStoreClient) Watch(key string, updateChannel chan NodeChange) (chan bool, error) {
 	Verbose("Watch() key: %s, channel: %V", key, updateChannel)
 	stopChannel := make(chan bool)
 	go func() {
@@ -157,15 +157,15 @@ func (r *EtcdStoreClient) Watch(key string, updateChannel chan NodeChange) (chan
 			updateChannel <- r.GetNodeEvent(response)
 		}
 	}()
-	return stopChannel,nil
+	return stopChannel, nil
 }
 
-func (r *EtcdStoreClient) CreateNode(response *etcd.Node) (*Node) {
+func (r *EtcdStoreClient) CreateNode(response *etcd.Node) *Node {
 	node := &Node{}
 	node.Path = response.Key
 	if response.Dir == false {
 		node.Directory = false
-		node.Value     = response.Value
+		node.Value = response.Value
 	} else {
 		node.Directory = true
 	}

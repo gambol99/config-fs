@@ -29,12 +29,12 @@ func main() {
 	/* step: create the configuration store */
 	storefs, err := store.NewStore()
 	if err != nil {
-		glog.Errorf("Failed to initialize a configuration fs, error: %s", err )
+		glog.Errorf("Failed to initialize a configuration fs, error: %s", err)
 		os.Exit(1)
 	}
 	/* step: wait for a exit signal */
 	signalChannel := make(chan os.Signal, 1)
-	signal.Notify( signalChannel, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT )
+	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		/* step: wait on the signal */
 		<-signalChannel
@@ -43,4 +43,3 @@ func main() {
 		os.Exit(0)
 	}()
 }
-

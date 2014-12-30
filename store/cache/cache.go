@@ -22,9 +22,9 @@ import (
 
 type Cache interface {
 	/* retrieve an entry from the cache */
-	Get(string) (interface{},bool)
+	Get(string) (interface{}, bool)
 	/* set a entry in the cache */
-	Set(string, interface{},time.Duration)
+	Set(string, interface{}, time.Duration)
 	/* Remvoe a key from the cache */
 	Delete(string)
 	/* check if a key exist in the cache */
@@ -37,9 +37,9 @@ type Cache interface {
 
 type CachedItem struct {
 	/* the unix timestamp the item is expiring in */
-	Expiring    int64
+	Expiring int64
 	/* the data we are holding */
-	Data 		interface {}
+	Data interface{}
 }
 
 type CacheStore struct {
@@ -57,14 +57,14 @@ func NewCacheStore() Cache {
 /*
 The reaper is responsible for looping around and removing any cache item thats
 old
- */
+*/
 func (c *CacheStore) Reaper() {
 	go func() {
 		for {
 			/* step: reap any old items */
 			c.ReapItems()
 			/* step: go to sleep */
-			time.Sleep( 5 * time.Second )
+			time.Sleep(5 * time.Second)
 		}
 	}()
 }
@@ -72,20 +72,20 @@ func (c *CacheStore) Reaper() {
 func (c *CacheStore) ReapItems() {
 	c.Lock()
 	defer c.Unlock()
-	if len( c.Items ) <= 0 {
-		glog.V(5).Infof("Cache Reaper: no items in the cache to reap" )
+	if len(c.Items) <= 0 {
+		glog.V(5).Infof("Cache Reaper: no items in the cache to reap")
 		return
 	}
 	now := time.Now().Unix()
 	for key, item := range c.Items {
 		if item.Expiring > 0 && now >= item.Expiring {
-			glog.V(6).Infof("Expiring the item: %s", item )
-			delete( c.Items, key )
+			glog.V(6).Infof("Expiring the item: %s", item)
+			delete(c.Items, key)
 		}
 	}
 }
 
-func (c *CacheStore) Get(key string) (interface{},bool) {
+func (c *CacheStore) Get(key string) (interface{}, bool) {
 	/* step: if the key is empty return */
 	if key == "" {
 		return nil, false
@@ -94,13 +94,13 @@ func (c *CacheStore) Get(key string) (interface{},bool) {
 	defer c.RUnlock()
 	glog.V(9).Infof("Get() key: %s", key)
 	if item, found := c.Items[key]; found {
-		glog.V(10).Infof("Get() key: %s found in cache", key )
+		glog.V(10).Infof("Get() key: %s found in cache", key)
 		return item.Data, true
 	}
 	return nil, false
 }
 
-func (c *CacheStore) Set(key string, item interface{}, ttl time.Duration ) {
+func (c *CacheStore) Set(key string, item interface{}, ttl time.Duration) {
 	/* step: if the key is empty return */
 	if key == "" {
 		return
@@ -111,8 +111,8 @@ func (c *CacheStore) Set(key string, item interface{}, ttl time.Duration ) {
 	if ttl != 0 {
 		expiration_time = (time.Now().Unix()) + int64(ttl.Seconds())
 	}
-	glog.V(9).Infof("Set() key: %s, value: %V, expiration: %d", key, item, expiration_time )
-	c.Items[key] = &CachedItem{expiration_time,item}
+	glog.V(9).Infof("Set() key: %s, value: %V, expiration: %d", key, item, expiration_time)
+	c.Items[key] = &CachedItem{expiration_time, item}
 }
 
 func (c *CacheStore) Delete(key string) {

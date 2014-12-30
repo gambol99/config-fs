@@ -14,6 +14,6 @@ limitations under the License.
 package store
 
 const (
-	DEFAULT_KV_STORE 	= "etcd://localhost:4001"
+	DEFAULT_KV_STORE    = "etcd://localhost:4001"
 	DEFAULT_MOUNT_POINT = "/config"
 )

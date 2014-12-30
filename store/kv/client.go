@@ -71,7 +71,7 @@ type Node struct {
 }
 
 func (n Node) String() string {
-	return fmt.Sprintf("path: %s, value: %s, type: %s", n.Path, n.Value, n.Directory )
+	return fmt.Sprintf("path: %s, value: %s, type: %s", n.Path, n.Value, n.Directory)
 }
 
 func (n Node) IsDir() bool {

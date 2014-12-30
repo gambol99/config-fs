@@ -21,26 +21,26 @@ import (
 	"github.com/golang/glog"
 )
 
-func NewStore() (Store,error) {
-	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url )
+func NewStore() (Store, error) {
+	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url)
 	store := new(ConfigurationStore)
 	/* step: parse the url */
 	uri, err := url.Parse(*kv_store_url)
 	if err != nil {
-		glog.Errorf("Failed to parse thr k/v url: %s, error: %s", *kv_store_url, err )
+		glog.Errorf("Failed to parse thr k/v url: %s, error: %s", *kv_store_url, err)
 		return nil, err
 	}
 	/* step: get the correct the kv agent */
 	switch uri.Scheme {
 	case "etcd":
 		if agent, err := kv.NewEtcdStoreClient(uri); err != nil {
-			glog.Errorf("Failed to create the K/V agent, error: %s", err )
+			glog.Errorf("Failed to create the K/V agent, error: %s", err)
 			return nil, err
 		} else {
 			store.KV = agent
 		}
 	default:
-		return nil, errors.New("Unsupported key/value store: "+ *kv_store_url )
+		return nil, errors.New("Unsupported key/value store: " + *kv_store_url)
 	}
 	return store, nil
 }

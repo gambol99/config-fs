@@ -21,7 +21,7 @@ const (
 	AGENT_VERBOSE_LEVEL = 6
 )
 
-func Verbose(message string, args ...interface {}) {
+func Verbose(message string, args ...interface{}) {
 	glog.V(AGENT_VERBOSE_LEVEL).Infof(message, args)
 }
 
@@ -33,14 +33,13 @@ type DiscoveryAgent interface {
 }
 
 type Service struct {
-	ID 		string
+	ID string
 	/* the name of the service */
-	Name    string
+	Name string
 	/* the ip address of the service */
 	Address string
 	/* the port the service is running on */
-	Port 	uint
+	Port uint
 	/* any tags related to the service */
-	Tags 	[]string
+	Tags []string
 }
-
