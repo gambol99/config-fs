@@ -7,4 +7,7 @@
 FROM busybox
 MAINTAINER <gambol99@gmail.com>
 
-
+ADD ./stage/config-fs /bin/config-fs
+ADD ./stage/startup.sh ./startup.sh
+RUN chmod +x /startup.sh; chmod +x /bin/config-fs
+ENTRYPOINT [ "/startup.sh" ]

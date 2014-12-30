@@ -6,7 +6,7 @@
 #
 NAME="config-fs"
 AUTHOR=gambol99
-VERSION=0.0.1
+VERSION=$(shell awk '/const Version/ { print $$4 }' version.go | sed 's/"//g')
 
 build:
 	go build -o stage/${NAME}
@@ -21,8 +21,7 @@ release:
 	mkdir release
 	GOOS=linux go build -o release/$(NAME)
 	cd release && tar -zcf $(NAME)_$(VERSION)_linux_$(HARDWARE).tgz $(NAME)
+	git log $(shell git tag | tail -n1)..HEAD --no-merges --format=%B > release/changelog
 	rm release/$(NAME)
 
-.PHONY: build
-
-
+.PHONY: build release

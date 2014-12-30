@@ -47,7 +47,7 @@ type StoreFileSystem interface {
 	/* get a list of the children */
 	List(path string) ([]string,error)
 	/* check if exists */
-	Exists(path string) error
+	Exists(path string) bool
 	/* checks if a directory */
 	IsDirectory(path string) bool
 	/* checks if file */
@@ -155,7 +155,7 @@ func (r *StoreFS) List(path string) ([]string,error) {
 	return list, nil
 }
 
-func (r *StoreFS) Exists(path string) error {
+func (r *StoreFS) Exists(path string) bool {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		Verbose("Exists() the file: %s does not exist", path)
 		return false
@@ -164,7 +164,7 @@ func (r *StoreFS) Exists(path string) error {
 	return true
 }
 
-func (r *StoreFS) Stat(path string) (FileInfo,error) {
+func (r *StoreFS) Stat(path string) (os.FileInfo,error) {
  	if stat, err := os.Stat( path ); err != nil {
 		glog.Errorf("Failed to stat the path: %s, error: %s", path, err )
 		return nil, err

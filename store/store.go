@@ -85,7 +85,7 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
             switch {
             case node.IsFile():
                 /* step: if the file does not exist, create it */
-                if !r.FileFS.Exists(path) {
+                if r.FileFS.Exists(path) == false {
                     if err := r.FileFS.Create(path, node.Value); err != nil {
                         glog.Errorf("Failed to create the file: %s, error: %s", path, err)
                         continue
