@@ -66,7 +66,6 @@ type StoreFileSystem interface {
 }
 
 type StoreFS struct {
-
 }
 
 func NewStoreFS() StoreFileSystem {
@@ -80,7 +79,7 @@ func (r *StoreFS) Create(path string, value string) error {
 		return DirectoryDoesNotExistErr
 	}
 	/* step: create the file */
-	glog.V(5).Infof("Create() path: %s, creating file, value: %s", path, value )
+	glog.V(5).Infof("Create() path: %s, creating file, value: %s", path, value)
 	if fs, err := os.Create(path); err != nil {
 		glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 		return err

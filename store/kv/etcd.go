@@ -59,9 +59,9 @@ func (r *EtcdStoreClient) Get(key string) (*Node, error) {
 	}
 }
 
-func (r *EtcdStoreClient) GetRaw(key string) (*etcd.Response,error) {
+func (r *EtcdStoreClient) GetRaw(key string) (*etcd.Response, error) {
 	Verbose("GetRaw() key: %s", key)
-	response, err := r.Client.Get(key, false, true )
+	response, err := r.Client.Get(key, false, true)
 	if err != nil {
 		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 		return nil, err
@@ -126,7 +126,7 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 		for _, item := range response.Node.Nodes {
 			list = append(list, r.CreateNode(item))
 		}
-		glog.V(5).Infof("List() path: %s, nodes: %v", list )
+		glog.V(5).Infof("List() path: %s, nodes: %v", list)
 		return list, nil
 	}
 }
