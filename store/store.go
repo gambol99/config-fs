@@ -23,16 +23,18 @@ import (
 /* --- command line options ---- */
 var (
 	kv_store_url, mount_point *string
+	delete_on_exit *bool
 )
 
 func init() {
-	kv_store_url = flag.String("--store", DEFAULT_KV_STORE, "the url for key / value store")
-	mount_point = flag.String("--mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
+	kv_store_url   = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
+	mount_point    = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
+	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit" )
 }
 
 type Store interface {
 	/* perform synchronization between the mount point and the kv store */
-	Synchronize() (chan bool, error)
+	Synchronize() error
 	/* shutdown the resources */
 	Close()
 }
@@ -46,12 +48,14 @@ type ConfigurationStore struct {
 	Shutdown chan bool
 }
 
-func (r *ConfigurationStore) Synchronize() (chan bool, error) {
+func (r *ConfigurationStore) Synchronize() error {
 	/* step: create a shutdown signal for us */
-	shutdownSignal := make(chan bool, 0)
-	glog.Infof("Synchronize() starting the sychronization between store and config-fs")
-
-	return shutdownSignal, nil
+	glog.Infof("Synchronize() starting the sychronization between mount: %s and store: %s", *mount_point, *kv_store_url )
+	if err := r.BuildFileSystem(); err != nil {
+		glog.Errorf("Failed to build the initial filesystem, error: %s", err )
+		return err
+	}
+	return nil
 }
 
 func (r *ConfigurationStore) FullPath(path string) string {
@@ -60,7 +64,7 @@ func (r *ConfigurationStore) FullPath(path string) string {
 
 func (r *ConfigurationStore) BuildFileSystem() error {
 	glog.Infof("Building the file system from k/v stote at: %s", *mount_point)
-
+	r.BuildDirectory("/")
 	return nil
 }
 
@@ -73,31 +77,24 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 	} else {
 		Verbose("BuildDiectory() processing directory: %s", directory)
 		for _, node := range listing {
-			path := r.FullPath(directory)
+			path := r.FullPath( node.Path )
+			glog.V(5).Infof("BuildDirectory() directory: %s, full path: %s", directory, path )
 			switch {
 			case node.IsFile():
 				/* step: if the file does not exist, create it */
-				if r.FileFS.Exists(path) == false {
-					if err := r.FileFS.Create(path, node.Value); err != nil {
-						glog.Errorf("Failed to create the file: %s, error: %s", path, err)
-						continue
-					}
+				Verbose("BuildDirectory() Creating the file: %s", path )
+				if err := r.FileFS.Create(path, node.Value); err != nil {
+					glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 				}
 			case node.IsDir():
-				if r.FileFS.Exists(path) == true && r.FileFS.IsDirectory(path) == true {
-					Verbose("BuildDiectory() item directory: %s already exists, skipping", path)
-					continue
-				}
-				if !r.FileFS.Exists(path) {
+				if r.FileFS.Exists(path) == false {
 					Verbose("BuildDiectory() creating directory item: %s", path)
 					r.FileFS.Mkdir(path)
 				}
 				/* go recursive and build the contents of that directory */
-				go func() {
-					if err := r.BuildDirectory(path); err != nil {
-						glog.Errorf("Failed to build the item directory: %s, error: %s", path, err)
-					}
-				}()
+				if err := r.BuildDirectory( node.Path ); err != nil {
+					glog.Errorf("Failed to build the item directory: %s, error: %s", path, err)
+				}
 			}
 		}
 	}

@@ -66,12 +66,17 @@ type StoreFileSystem interface {
 }
 
 type StoreFS struct {
+
+}
+
+func NewStoreFS() StoreFileSystem {
+	return &StoreFS{}
 }
 
 func (r *StoreFS) Create(path string, value string) error {
 	if found := r.Exists(path); found {
-		glog.Errorf("The file: %s already exists, use update instead", path)
-		return errors.New("The file: " + path + " already exists, use update")
+		glog.Infof("The file: %s already exists, use update instead", path)
+		return nil
 	}
 	parentDirectory := filepath.Dir(path)
 	if !r.IsDirectory(parentDirectory) {
@@ -212,7 +217,7 @@ func (r *StoreFS) Mkdir(path string) error {
 		glog.Errorf("Failed to create directory: %s, parent: %s is not a directorty", path, parentDirectory)
 		return errors.New("The parent is not a directory")
 	}
-	if err := os.Mkdir(path, os.FileMode(0555)); err != nil {
+	if err := os.Mkdir(path, os.FileMode(0775)); err != nil {
 		glog.Errorf("Failed to create the directory: %s, error: %s", path, err)
 		return err
 	}

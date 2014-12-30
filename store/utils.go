@@ -24,6 +24,8 @@ import (
 func NewStore() (Store, error) {
 	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url)
 	store := new(ConfigurationStore)
+	store.Shutdown = make(chan bool, 1)
+	store.FileFS   = NewStoreFS()
 	/* step: parse the url */
 	uri, err := url.Parse(*kv_store_url)
 	if err != nil {

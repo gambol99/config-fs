@@ -2,6 +2,7 @@
 config-fs.iml
 stage/config-fs
 config-fs
+changelog
 .idea/
 logs/
 mount/

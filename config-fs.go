@@ -32,14 +32,19 @@ func main() {
 		glog.Errorf("Failed to initialize a configuration fs, error: %s", err)
 		os.Exit(1)
 	}
-	/* step: wait for a exit signal */
-	signalChannel := make(chan os.Signal, 1)
+	glog.Infof("Starting the config synchronization")
+	if err := storefs.Synchronize(); err != nil {
+		glog.Errorf("Failed to the synchronize the configuration, error: %s", err )
+		os.Exit(1)
+	}
+	glog.Infof("Waiting for signal to quit")
+	/* step: setup the channel for shutdown signals */
+	signalChannel := make(chan os.Signal)
+	/* step: register the signals */
 	signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	go func() {
-		/* step: wait on the signal */
-		<-signalChannel
-		glog.Infof("Recieved a kill signal, attempting to unmount and exit")
-		storefs.Close()
-		os.Exit(0)
-	}()
+	/* step: wait on the signal */
+	<-signalChannel
+
+	glog.Infof("Recieved a kill signal, exitting")
+	storefs.Close()
 }

@@ -59,9 +59,9 @@ func (r *EtcdStoreClient) Get(key string) (*Node, error) {
 	}
 }
 
-func (r *EtcdStoreClient) GetRaw(key string) (response *etcd.Response, err error) {
+func (r *EtcdStoreClient) GetRaw(key string) (*etcd.Response,error) {
 	Verbose("GetRaw() key: %s", key)
-	response, err = r.Client.Get(key, false, false)
+	response, err := r.Client.Get(key, false, true )
 	if err != nil {
 		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 		return nil, err
@@ -111,10 +111,13 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 		path = "/" + path
 	}
 	Verbose("List() path: %s", path)
+
 	if response, err := r.GetRaw(path); err != nil {
 		glog.Errorf("List() failed to get path: %s, error: %s", path, err)
 		return nil, err
 	} else {
+		glog.V(5).Infof("List() path: %s, response: %v", path, response)
+
 		list := make([]*Node, 0)
 		if response.Node.Dir == false {
 			glog.Errorf("List() path: %s is not a directory node", path)
@@ -123,6 +126,7 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 		for _, item := range response.Node.Nodes {
 			list = append(list, r.CreateNode(item))
 		}
+		glog.V(5).Infof("List() path: %s, nodes: %v", list )
 		return list, nil
 	}
 }
