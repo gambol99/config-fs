@@ -74,26 +74,25 @@ func NewStoreFS() StoreFileSystem {
 }
 
 func (r *StoreFS) Create(path string, value string) error {
-	if found := r.Exists(path); found {
-		glog.Infof("The file: %s already exists, use update instead", path)
-		return nil
-	}
 	parentDirectory := filepath.Dir(path)
 	if !r.IsDirectory(parentDirectory) {
 		glog.Errorf("Failed to create file: %s, parent: %s does not exist", path, parentDirectory)
 		return DirectoryDoesNotExistErr
 	}
 	/* step: create the file */
+	glog.V(5).Infof("Create() path: %s, creating file, value: %s", path, value )
 	if fs, err := os.Create(path); err != nil {
 		glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 		return err
 	} else {
 		/* change the perms to read only */
-		fs.Chmod(os.FileMode(0444))
+		fs.Chmod(os.FileMode(0744))
 		if _, err := fs.WriteString(value); err != nil {
 			glog.Errorf("Failed to write the contents to file, error: %s", err)
 			fs.Close()
 			os.Remove(path)
+		} else {
+			fs.Close()
 		}
 	}
 	return nil

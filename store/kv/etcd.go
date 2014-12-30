@@ -131,7 +131,7 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 	}
 }
 
-func (r *EtcdStoreClient) Watch(key string, updateChannel chan NodeChange) (chan bool, error) {
+func (r *EtcdStoreClient) Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error) {
 	Verbose("Watch() key: %s, channel: %V", key, updateChannel)
 	stopChannel := make(chan bool)
 	go func() {
@@ -179,6 +179,7 @@ func (r *EtcdStoreClient) CreateNode(response *etcd.Node) *Node {
 func (r *EtcdStoreClient) GetNodeEvent(response *etcd.Response) (event NodeChange) {
 	event.Node.Path = response.Node.Key
 	event.Node.Value = response.Node.Value
+	event.Node.Directory = response.Node.Dir
 	switch response.Action {
 	case "set":
 		event.Operation = CHANGED

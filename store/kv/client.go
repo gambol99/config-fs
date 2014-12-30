@@ -29,6 +29,8 @@ func Verbose(message string, args ...interface{}) {
 	glog.V(STORE_VERBOSE_LEVEL).Infof(message, args)
 }
 
+type NodeUpdateChannel chan NodeChange
+
 type KVStore interface {
 	/* retrieve a key from the store */
 	Get(key string) (*Node, error)
@@ -43,7 +45,7 @@ type KVStore interface {
 	/* Create a directory node */
 	Mkdir(path string) error
 	/* watch for changes on the key */
-	Watch(key string, updateChannel chan NodeChange) (chan bool, error)
+	Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error)
 }
 
 type Action int

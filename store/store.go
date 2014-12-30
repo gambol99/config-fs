@@ -15,6 +15,7 @@ package store
 
 import (
 	"flag"
+	"time"
 
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/golang/glog"
@@ -24,12 +25,14 @@ import (
 var (
 	kv_store_url, mount_point *string
 	delete_on_exit *bool
+	refresh_interval *int
 )
 
 func init() {
-	kv_store_url   = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
-	mount_point    = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
-	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit" )
+	kv_store_url     = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
+	mount_point      = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
+	delete_on_exit 	 = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit" )
+	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync" )
 }
 
 type Store interface {
@@ -55,6 +58,38 @@ func (r *ConfigurationStore) Synchronize() error {
 		glog.Errorf("Failed to build the initial filesystem, error: %s", err )
 		return err
 	}
+	/* step: we wait for a timer, a node update or a shutdown signal */
+	go func() {
+		/* step: create the timer */
+		TimerChannel := time.NewTicker(time.Duration(*refresh_interval) * time.Second )
+		/* step: create the watch on the base */
+		NodeChannel  := make(kv.NodeUpdateChannel,1)
+		/* step: create a watch of the K/V */
+		if  _, err := r.KV.Watch("/", NodeChannel ); err != nil {
+			glog.Errorf("Failed to add watch to root directory, error: %s", err )
+			return
+		}
+		/* step: never say die - unless asked to of course */
+		for {
+			select {
+			case event := <- NodeChannel:
+				glog.V(5).Infof("Synchronize() recieved node event: %s, resynchronizing", event )
+				if event.Node.IsFile() {
+					if err := r.FileFS.Create(r.FullPath( event.Node.Path ), event.Node.Value); err != nil {
+						glog.Errorf("Failed to create the file: %s, error: %s", event.Node.Path, err)
+					}
+				} else {
+					go r.BuildDirectory( event.Node.Path )
+				}
+			case <- TimerChannel.C:
+				glog.V(5).Infof("Synchronize() recieved ticker event , kicking off a synchronization" )
+				go r.BuildFileSystem()
+			case <- r.Shutdown:
+				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down" )
+				break
+			}
+		}
+	}()
 	return nil
 }
 
