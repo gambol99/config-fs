@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package templates
+package store
 
 import (
 	"errors"
@@ -19,10 +19,6 @@ import (
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/golang/glog"
-)
-
-const (
-	VERBOSE_LEVEL = 5
 )
 
 /* the template resource manager interface */

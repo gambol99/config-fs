@@ -21,7 +21,6 @@ import (
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
-	"github.com/gambol99/config-fs/store/templates"
 	"github.com/golang/glog"
 )
 
@@ -59,7 +58,7 @@ type ConfigurationStore struct {
 	/* discovery agent */
 	Agent discovery.Discovery
 	/* the template manager */
-	Resources templates.TemplateManager
+	Resources TemplateManager
 	/* the shutdown signal */
 	Shutdown chan bool
 }
@@ -75,7 +74,7 @@ func NewStore() (Store, error) {
 	/* the discovery manager */
 	store.Agent = discovery.NewDiscoveryService()
 	/* the resource manager */
-	store.Resources = templates.NewTemplateManager(store.Agent)
+	store.Resources = NewTemplateManager(store.Agent)
 	/* step: parse the url */
 	uri, err := url.Parse(*kv_store_url)
 	if err != nil {
@@ -126,7 +125,7 @@ func (r *ConfigurationStore) Synchronize() error {
 		/* step: create the watch on the base */
 		NodeChannel := make(kv.NodeUpdateChannel, 1)
 		/* step: create a channel for sending updates on template resources */
-		TemplateChannel := make(templates.TemplateUpdateChannel, 0)
+		TemplateChannel := make(TemplateUpdateChannel, 0)
 
 		/* step: create a watch of the K/V */
 		if _, err := r.KV.Watch("/", NodeChannel); err != nil {
@@ -152,7 +151,7 @@ func (r *ConfigurationStore) Synchronize() error {
 }
 
 /* Handle a change to the templated resource */
-func (r *ConfigurationStore) HandleTemplateEvent(event templates.TemplateUpdateEvent) {
+func (r *ConfigurationStore) HandleTemplateEvent(event TemplateUpdateEvent) {
 
 }
 
