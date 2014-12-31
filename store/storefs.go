@@ -26,7 +26,9 @@ import (
 )
 
 const (
-	VERBOSE_LEVEL = 6
+	VERBOSE_LEVEL           = 6
+	DEFAULT_DIRECTORY_PERMS = 0755
+	DEFAULT_FILE_PERMS      = 0644
 )
 
 func Verbose(message string, args ...interface{}) {
@@ -38,6 +40,7 @@ var (
 	DirectoryDoesNotExistErr = errors.New("The directory does not exist")
 	FileDoesNotExistErr      = errors.New("The file does not exist")
 	NotFileErr               = errors.New("The argument is not a value file path")
+	IsNotDirectoryErr        = errors.New("The path is not a directory")
 )
 
 type StoreFileSystem interface {
@@ -57,12 +60,16 @@ type StoreFileSystem interface {
 	IsFile(path string) bool
 	/* create a directory */
 	Mkdir(path string) error
+	/* create a directory structure */
+	Mkdirp(path string) error
 	/* delete the directory */
 	Rmdir(path string) error
 	/* get the hash of the file content */
 	Hash(path string) (string, error)
 	/* touch the file */
 	Touch(path string) error
+	/* parent directory */
+	Dirname(path string) string
 }
 
 type StoreFS struct {
@@ -85,7 +92,7 @@ func (r *StoreFS) Create(path string, value string) error {
 		return err
 	} else {
 		/* change the perms to read only */
-		fs.Chmod(os.FileMode(0744))
+		fs.Chmod(os.FileMode(DEFAULT_FILE_PERMS))
 		if _, err := fs.WriteString(value); err != nil {
 			glog.Errorf("Failed to write the contents to file, error: %s", err)
 			fs.Close()
@@ -121,7 +128,7 @@ func (r *StoreFS) Update(path string, value string) error {
 }
 
 func (r *StoreFS) Delete(path string) error {
-	Verbose("Delete() deleting the file: %s", path)
+	glog.V(VERBOSE_LEVEL).Infof("Delete() deleting the file: %s", path)
 	if !r.Exists(path) {
 		glog.Errorf("The file: %s does not exist", path)
 		return FileDoesNotExistErr
@@ -162,10 +169,8 @@ func (r *StoreFS) List(path string) ([]string, error) {
 
 func (r *StoreFS) Exists(path string) bool {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		Verbose("Exists() the file: %s does not exist", path)
 		return false
 	}
-	Verbose("Exists() file: %s exists", path)
 	return true
 }
 
@@ -215,7 +220,15 @@ func (r *StoreFS) Mkdir(path string) error {
 		glog.Errorf("Failed to create directory: %s, parent: %s is not a directorty", path, parentDirectory)
 		return errors.New("The parent is not a directory")
 	}
-	if err := os.Mkdir(path, os.FileMode(0775)); err != nil {
+	if err := os.Mkdir(path, os.FileMode(DEFAULT_DIRECTORY_PERMS)); err != nil {
+		glog.Errorf("Failed to create the directory: %s, error: %s", path, err)
+		return err
+	}
+	return nil
+}
+
+func (r *StoreFS) Mkdirp(path string) error {
+	if err := os.MkdirAll(path, os.FileMode(DEFAULT_DIRECTORY_PERMS)); err != nil {
 		glog.Errorf("Failed to create the directory: %s, error: %s", path, err)
 		return err
 	}
@@ -236,6 +249,10 @@ func (r *StoreFS) Rmdir(path string) error {
 		return err
 	}
 	return nil
+}
+
+func (r *StoreFS) Dirname(path string) string {
+	return filepath.Dir(path)
 }
 
 const FILE_CHUNKS = 8192

@@ -14,6 +14,7 @@ limitations under the License.
 package store
 
 import (
+	"errors"
 	"flag"
 	"time"
 
@@ -76,17 +77,9 @@ func (r *ConfigurationStore) Synchronize() error {
 		for {
 			select {
 			case event := <-NodeChannel:
-				glog.V(5).Infof("Synchronize() recieved node event: %s, resynchronizing", event)
-				if event.Node.IsFile() {
-					if err := r.FileFS.Create(r.FullPath(event.Node.Path), event.Node.Value); err != nil {
-						glog.Errorf("Failed to create the file: %s, error: %s", event.Node.Path, err)
-					}
-				} else {
-					go r.BuildDirectory(event.Node.Path)
-				}
+				go r.ProcessNodeEvent(event)
 			case <-TimerChannel.C:
-				glog.V(5).Infof("Synchronize() recieved ticker event , kicking off a synchronization")
-				go r.BuildFileSystem()
+				go r.ProcessTimerEvent()
 			case <-r.Shutdown:
 				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down")
 				break
@@ -94,6 +87,103 @@ func (r *ConfigurationStore) Synchronize() error {
 		}
 	}()
 	return nil
+}
+
+/*
+We have a timer event, let force re-sync the configuration
+*/
+func (r *ConfigurationStore) ProcessTimerEvent() {
+	glog.V(5).Infof("ProcessTimerEvent() recieved ticker event , kicking off a synchronization")
+
+}
+
+/*
+Handle changes to the K/V store and reflect in the directory
+*/
+func (r *ConfigurationStore) ProcessNodeEvent(event kv.NodeChange) {
+	glog.V(5).Infof("ProcessNodeEvent() recieved node event: %s, resynchronizing", event)
+	/* check: an update or deletion */
+	switch event.Operation {
+	case kv.DELETED:
+		r.ProcessNodeDeletion(event.Node)
+	case kv.CHANGED:
+		r.ProcessNodeUpdate(event.Node)
+	default:
+		glog.Errorf("ProcessTimerEvent() unknown operation, skipping the event: %s", event)
+	}
+}
+
+func (r *ConfigurationStore) ProcessNodeDeletion(node kv.Node) error {
+	fullPath := r.FullPath(node.Path)
+	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeDeletion() node: %s, path: %s", node, fullPath)
+	switch {
+	case node.IsDir():
+		glog.V(VERBOSE_LEVEL).Infof("Deleting the directory: %s", fullPath)
+		/* step: check it is a actual directory */
+		if _, err := r.IsDirectory(fullPath); err != nil {
+			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
+			return err
+		}
+		/* step: attempt to remove it */
+		if err := r.FileFS.Rmdir(fullPath); err != nil {
+			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
+		}
+	case node.IsFile():
+		glog.V(VERBOSE_LEVEL).Infof("Deleting the file: %s", fullPath)
+		if r.FileFS.Exists(fullPath) && r.FileFS.IsFile(fullPath) {
+			if err := r.FileFS.Delete(fullPath); err != nil {
+				glog.Errorf("Failed to delete the file: %s, error: %s", fullPath, err)
+				return err
+			}
+			glog.V(VERBOSE_LEVEL).Infof("Successfully deleted the file: %s", fullPath)
+		} else {
+			glog.Errorf("Failed to delete the file: %s, the file doesnt exist or is not a file", fullPath)
+			return errors.New("Failed to delete the file, either not a file or does not exist")
+		}
+	default:
+		return errors.New("Unknown node type, neither file or directory")
+	}
+	return nil
+}
+
+/*
+A node has been change, altered or created
+*/
+func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
+	fullPath := r.FullPath(node.Path)
+	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeUpdate() node: %s, path: %s", node, fullPath)
+	switch {
+	case node.IsDir():
+		/* step: we need to make sure the directory structure exists */
+		parentDirectory := r.FileFS.Dirname(fullPath)
+		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
+			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
+			return err
+		}
+	case node.IsFile():
+		/* step: we need to make sure the directory structure exists */
+		parentDirectory := r.FileFS.Dirname(fullPath)
+		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
+			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
+			return err
+		}
+		/* step: create the file */
+		if err := r.FileFS.Create(fullPath, node.Value); err != nil {
+			glog.Errorf("Failed to create the file: %s, error: %s", fullPath, err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ConfigurationStore) IsDirectory(path string) (bool, error) {
+	if r.FileFS.Exists(path) == false {
+		return false, DirectoryDoesNotExistErr
+	}
+	if r.FileFS.IsDirectory(path) == false {
+		return false, IsNotDirectoryErr
+	}
+	return true, nil
 }
 
 func (r *ConfigurationStore) FullPath(path string) string {
