@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"time"
+	"net/url"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -37,6 +38,9 @@ func init() {
 	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
 }
 
+/*
+The interface to the config-fs
+ */
 type Store interface {
 	/* perform synchronization between the mount point and the kv store */
 	Synchronize() error
@@ -44,6 +48,9 @@ type Store interface {
 	Close()
 }
 
+/*
+The implementation of the above
+ */
 type ConfigurationStore struct {
 	/* the k/v agent for the store */
 	KV kv.KVStore
@@ -55,19 +62,64 @@ type ConfigurationStore struct {
 	Shutdown chan bool
 }
 
+/*
+Create a new configuration store
+ */
+func NewStore() (Store, error) {
+	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url)
+	store := new(ConfigurationStore)
+	store.Shutdown = make(chan bool, 1)
+	store.FileFS = NewStoreFS()
+	/* step: parse the url */
+	uri, err := url.Parse(*kv_store_url)
+	if err != nil {
+		glog.Errorf("Failed to parse thr k/v url: %s, error: %s", *kv_store_url, err)
+		return nil, err
+	}
+	/* step: get the correct the kv agent */
+	switch uri.Scheme {
+	case "etcd":
+		if agent, err := kv.NewEtcdStoreClient(uri); err != nil {
+			glog.Errorf("Failed to create the K/V agent, error: %s", err)
+			return nil, err
+		} else {
+			store.KV = agent
+		}
+	default:
+		return nil, errors.New("Unsupported key/value store: "+*kv_store_url)
+	}
+	return store, nil
+}
+
+/* converts the k/v path to the full path on disk - essentially mount_point + node_path */
+func (r *ConfigurationStore) FullPath(path string) string {
+	return *mount_point + path
+}
+
+/*
+Synchronize the key/value store with the configuration directory
+ */
 func (r *ConfigurationStore) Synchronize() error {
-	/* step: create a shutdown signal for us */
+	/* step: start by performing a initial config build */
 	glog.Infof("Synchronize() starting the sychronization between mount: %s and store: %s", *mount_point, *kv_store_url)
 	if err := r.BuildFileSystem(); err != nil {
 		glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 		return err
 	}
-	/* step: we wait for a timer, a node update or a shutdown signal */
+
+	/* step: jump into the event loop; we wait for
+		- a change to occur in the K/V store
+		- a timer event to occur and enforce a refresh of the config
+		- a notification of file changes on the config directory
+		- a shutdown signal to occur
+	 */
 	go func() {
 		/* step: create the timer */
 		TimerChannel := time.NewTicker(time.Duration(*refresh_interval) * time.Second)
+
 		/* step: create the watch on the base */
 		NodeChannel := make(kv.NodeUpdateChannel, 1)
+
 		/* step: create a watch of the K/V */
 		if _, err := r.KV.Watch("/", NodeChannel); err != nil {
 			glog.Errorf("Failed to add watch to root directory, error: %s", err)
@@ -77,9 +129,9 @@ func (r *ConfigurationStore) Synchronize() error {
 		for {
 			select {
 			case event := <-NodeChannel:
-				go r.ProcessNodeEvent(event)
+				go r.HandleNodeEvent(event)
 			case <-TimerChannel.C:
-				go r.ProcessTimerEvent()
+				go r.HandleTimerEvent()
 			case <-r.Shutdown:
 				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down")
 				break
@@ -92,7 +144,7 @@ func (r *ConfigurationStore) Synchronize() error {
 /*
 We have a timer event, let force re-sync the configuration
 */
-func (r *ConfigurationStore) ProcessTimerEvent() {
+func (r *ConfigurationStore) HandleTimerEvent() {
 	glog.V(5).Infof("ProcessTimerEvent() recieved ticker event , kicking off a synchronization")
 
 }
@@ -100,7 +152,7 @@ func (r *ConfigurationStore) ProcessTimerEvent() {
 /*
 Handle changes to the K/V store and reflect in the directory
 */
-func (r *ConfigurationStore) ProcessNodeEvent(event kv.NodeChange) {
+func (r *ConfigurationStore) HandleNodeEvent(event kv.NodeChange) {
 	glog.V(5).Infof("ProcessNodeEvent() recieved node event: %s, resynchronizing", event)
 	/* check: an update or deletion */
 	switch event.Operation {
@@ -146,23 +198,19 @@ func (r *ConfigurationStore) ProcessNodeDeletion(node kv.Node) error {
 	return nil
 }
 
-/*
-A node has been change, altered or created
-*/
+/* A node has been change, altered or created */
 func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
 	fullPath := r.FullPath(node.Path)
 	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeUpdate() node: %s, path: %s", node, fullPath)
+	parentDirectory := r.FileFS.Dirname(fullPath)
 	switch {
 	case node.IsDir():
 		/* step: we need to make sure the directory structure exists */
-		parentDirectory := r.FileFS.Dirname(fullPath)
 		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
 		}
 	case node.IsFile():
-		/* step: we need to make sure the directory structure exists */
-		parentDirectory := r.FileFS.Dirname(fullPath)
 		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
@@ -184,10 +232,6 @@ func (r *ConfigurationStore) IsDirectory(path string) (bool, error) {
 		return false, IsNotDirectoryErr
 	}
 	return true, nil
-}
-
-func (r *ConfigurationStore) FullPath(path string) string {
-	return *mount_point + path
 }
 
 func (r *ConfigurationStore) BuildFileSystem() error {

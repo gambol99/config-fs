@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/golang/glog"
+	"time"
 )
 
 const (
@@ -286,13 +287,13 @@ func (r *StoreFS) Hash(path string) (string, error) {
 }
 
 func (r *StoreFS) Touch(path string) error {
-	if !r.Exists(path) {
-		glog.Errorf("Failed to hash file: %s, the path does not exist", path)
-		return FileDoesNotExistErr
-	}
 	if !r.IsFile(path) {
 		glog.Errorf("Failed to hash file: %s, the path is not a file", path)
 		return FileDoesNotExistErr
+	}
+	if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
+		glog.Errorf("Failed to update stats on file: %s, error: %s", path, err )
+		return err
 	}
 	return nil
 }
