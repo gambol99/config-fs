@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/golang/glog"
 )
@@ -55,53 +54,55 @@ type Store interface {
 The implementation of the above
 */
 type ConfigurationStore struct {
-	StoreFileSystem
+	fs FileStore
 	/* the k/v agent for the store */
-	KV kv.KVStore
-	/* discovery agent */
-	Agent discovery.Discovery
-	/* the template manager */
-	Resources TemplateManager
+	kv kv.KVStore
+	/* the templated resources */
+	templated TemplatedStore
 	/* the shutdown signal */
-	Shutdown chan bool
+	shutdown chan bool
 }
-
 /*
 Create a new configuration store
 */
 func NewStore() (Store, error) {
-	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url)
-	store := &ConfigurationStore{NewStoreFS(), nil, nil, nil, nil}
-	/* the shutdown signal for the store */
-	store.Shutdown = make(chan bool, 1)
-	/* the discovery manager */
-	store.Agent = discovery.NewDiscoveryService()
-	/* the resource manager */
-	store.Resources = NewTemplateManager(store.Agent)
-	/* step: parse the url */
-	uri, err := url.Parse(*kv_store_url)
-	if err != nil {
-		glog.Errorf("Failed to parse thr k/v url: %s, error: %s", *kv_store_url, err)
+	glog.Infof("Creating a new configuration store, mountpoint: '%s', kv: '%s'", *mount_point, *kv_store_url)
+	if agent, err := NewConfigurationStore(); err != nil {
+		glog.Errorf("Failed to create a configuration store provider: %s, error: %s", *kv_store_url, err )
 		return nil, err
+	} else {
+		return &ConfigurationStore{
+			fs: NewStoreFS(),
+			kv: agent,
+			templated: NewTemplateStore(),
+			shutdown: make(chan bool, 1)}, nil
 	}
-	/* step: get the correct the kv agent */
-	switch uri.Scheme {
-	case "etcd":
-		if agent, err := kv.NewEtcdStoreClient(uri); err != nil {
-			glog.Errorf("Failed to create the K/V agent, error: %s", err)
-			return nil, err
-		} else {
-			store.KV = agent
+}
+
+func NewConfigurationStore() (kv.KVStore,error) {
+	glog.Infof("Creating a new configuration provider: %s", *kv_store_url )
+	/* step: parse the url */
+	if uri, err := url.Parse(*kv_store_url); err != nil {
+		glog.Errorf("Failed to parse the url: %s, error: %s", *kv_store_url, err)
+		return nil, err
+	} else {
+		switch uri.Scheme {
+		case "etcd":
+			agent, err := kv.NewEtcdStoreClient(uri)
+			if err != nil {
+				glog.Errorf("Failed to create the K/V agent, error: %s", err)
+				return nil, err
+			}
+			return agent, nil
+		default:
+			return nil, errors.New("Unsupported key/value store: "+*kv_store_url)
 		}
-	default:
-		return nil, errors.New("Unsupported key/value store: " + *kv_store_url)
 	}
-	return store, nil
 }
 
 func (r *ConfigurationStore) Close() {
 	glog.Infof("Request to shutdown and release the resources")
-	r.Shutdown <- true
+	r.shutdown <- true
 }
 
 /* Synchronize the key/value store with the configuration directory */
@@ -124,34 +125,43 @@ func (r *ConfigurationStore) Synchronize() error {
 		/* step: create the timer */
 		TimerChannel := time.NewTicker(time.Duration(*refresh_interval) * time.Second)
 		/* step: create the watch on the base */
-		NodeChannel := make(kv.NodeUpdateChannel, 1)
+		ConfigUpdateChannel := make(kv.NodeUpdateChannel, 5)
 		/* step: create a channel for sending updates on template resources */
-		TemplateChannel := make(TemplateUpdateChannel, 0)
+		TemplateChannel := make(TemplateUpdateChannel, 5)
+		/* step: file system notification channel */
+		FileNotifyChannel := make(chan bool, 5)
 
 		/* step: create a watch of the K/V */
-		if _, err := r.KV.Watch("/", NodeChannel); err != nil {
+		if _, err := r.kv.Watch("/", ConfigUpdateChannel); err != nil {
 			glog.Errorf("Failed to add watch to root directory, error: %s", err)
 			return
 		}
 		/* step: never say die - unless asked to of course */
 		for {
 			select {
-			case event := <-NodeChannel:
+			case event := <-ConfigUpdateChannel:
 				go r.HandleNodeEvent(event)
 			case event := <-TemplateChannel:
 				go r.HandleTemplateEvent(event)
+			case event := <- FileNotifyChannel:
+				go r.HandleFileNotificationEvent(event)
 			case <-TimerChannel.C:
 				go r.HandleTimerEvent()
-			case <-r.Shutdown:
+			case <-r.shutdown:
 				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down")
 				break
 			}
 		}
+		glog.Infof("Exited the main event loop")
 	}()
 	return nil
 }
 
 /* ============== EVENT HANDLING ================= */
+
+func (r *ConfigurationStore) HandleFileNotificationEvent(event interface {}) {
+
+}
 
 /* Handle a change to the templated resource */
 func (r *ConfigurationStore) HandleTemplateEvent(event TemplateUpdateEvent) {
@@ -191,23 +201,23 @@ func (r *ConfigurationStore) DeleteStoreConfigFile(path string) error {
 	full_path := r.FullPath(path)
 	glog.V(VERBOSE_LEVEL).Infof("DeleteStoreConfigFile() Deleting configuration file: %s from the store", full_path )
 	/* step: check it exists and is a file */
-	if !r.Exists(full_path) || !r.IsFile(full_path) {
+	if !r.fs.Exists(full_path) || !r.fs.IsFile(full_path) {
 		glog.Errorf("Failed to delete file: %s, either it doesnt exists or is not a file", full_path )
 		return errors.New("Failed to delete, either it doesnt exists or is not a file")
 	}
 	/* check: is the file a templated resource */
-	if r.Resources.IsTemplate(path) {
+	if r.templated.IsTemplate(path) {
 		glog.V(VERBOSE_LEVEL).Infof("Deleting the templated resource: %s", full_path )
 		/* step: free up the resources from the resource manager */
-		r.Resources.RemoveTemplate(path)
+		r.templated.RemoveTemplate(path)
 		/* step: delete the actual file */
-		if err := r.Delete(full_path); err != nil {
+		if err := r.fs.Delete(full_path); err != nil {
 			glog.Errorf("Failed to delete the file: %s, error: %s", full_path, err )
 			return err
 		}
 	}
 	/* step: delete the file */
-	if err := r.Delete(full_path); err != nil {
+	if err := r.fs.Delete(full_path); err != nil {
 		glog.Errorf("Failed to delete the file: %s, error: %s", full_path, err )
 		return err
 	}
@@ -229,10 +239,51 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 
 
 	/* step: delete the directory and all the children */
-	if err := r.RmDir(full_path); err != nil {
+	if err := r.fs.Rmdir(full_path); err != nil {
 		glog.Errorf("Failed to delete the directory: %s, error: %s", full_path, err )
 		return err
 	}
+	return nil
+}
+
+/* create a new directory in the configuration store */
+func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
+	/* the actual file system path */
+	full_path := r.FullPath(path)
+	glog.V(VERBOSE_LEVEL).Infof("CreateStoreConfigDirectory() path: %s", full_path)
+
+	/* step: we need to make sure the directory structure exists */
+	if err := r.fs.Mkdirp(full_path); err != nil {
+		glog.Errorf("Failed to ensure the directory: %s, error: %s", full_path, err)
+		return err
+	}
+	/* @TODO step: we add the new directory to the watch list */
+
+
+	return nil
+}
+
+/* create a new file in the configuration store */
+func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) error {
+	/* the actual file system path */
+	full_path := r.FullPath(path)
+	glog.V(VERBOSE_LEVEL).Infof("UpdateStoreConfigFile() path: %s", full_path)
+
+	/* step: we need to ensure the directory structure exists */
+	if err := r.fs.Mkdirp(r.fs.Dirname(full_path)); err != nil {
+		glog.Errorf("Failed to ensure the directory: %s, error: %s", r.fs.Dirname(full_path), err)
+		return err
+	}
+
+	/* step: we need to check if the file is a templated resource */
+
+	/* step: create the file */
+	if err := r.fs.Create(full_path, value); err != nil {
+		glog.Errorf("Failed to create the file: %s, error: %s", full_path, err)
+		return err
+	}
+
+
 	return nil
 }
 
@@ -241,21 +292,21 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
 	fullPath := r.FullPath(node.Path)
 	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeUpdate() node: %s, path: %s", node, fullPath)
-	parentDirectory := r.Dirname(fullPath)
+	parentDirectory := r.fs.Dirname(fullPath)
 	switch {
 	case node.IsDir():
 		/* step: we need to make sure the directory structure exists */
-		if err := r.Mkdirp(parentDirectory); err != nil {
+		if err := r.fs.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
 		}
 	case node.IsFile():
-		if err := r.Mkdirp(parentDirectory); err != nil {
+		if err := r.fs.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
 		}
 		/* step: create the file */
-		if err := r.Create(fullPath, node.Value); err != nil {
+		if err := r.fs.Create(fullPath, node.Value); err != nil {
 			glog.Errorf("Failed to create the file: %s, error: %s", fullPath, err)
 			return err
 		}
@@ -271,10 +322,10 @@ func (r *ConfigurationStore) FullPath(path string) string {
 }
 
 func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
-	if r.Exists(path) == false {
+	if r.fs.Exists(path) == false {
 		return false, DirectoryDoesNotExistErr
 	}
-	if r.IsDirectory(path) == false {
+	if r.fs.IsDirectory(path) == false {
 		return false, IsNotDirectoryErr
 	}
 	return true, nil
@@ -288,7 +339,7 @@ func (r *ConfigurationStore) BuildFileSystem() error {
 
 func (r *ConfigurationStore) BuildDirectory(directory string) error {
 	/* step: we get a listing of the files under the directory */
-	listing, err := r.KV.List(directory)
+	listing, err := r.kv.List(directory)
 	if err != nil {
 		glog.Errorf("Failed to get listing from directory: %s, error: %s", directory, err)
 		return err
@@ -301,13 +352,13 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			case node.IsFile():
 				/* step: if the file does not exist, create it */
 				glog.V(VERBOSE_LEVEL).Infof("BuildDirectory() Creating the file: %s", path)
-				if err := r.Create(path, node.Value); err != nil {
+				if err := r.fs.Create(path, node.Value); err != nil {
 					glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 				}
 			case node.IsDir():
-				if r.Exists(path) == false {
+				if r.fs.Exists(path) == false {
 					glog.V(VERBOSE_LEVEL).Infof("BuildDiectory() creating directory item: %s", path)
-					r.Mkdir(path)
+					r.fs.Mkdir(path)
 				}
 				/* go recursive and build the contents of that directory */
 				if err := r.BuildDirectory(node.Path); err != nil {

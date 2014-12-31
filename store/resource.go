@@ -17,12 +17,13 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/gambol99/config-fs/store/kv"
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/golang/glog"
 )
 
 /* the template resource manager interface */
-type TemplateManager interface {
+type TemplatedStore interface {
 	/* check if the path is a template */
 	IsTemplate(path string) bool
 	/* add a new template to the manager */
@@ -32,11 +33,15 @@ type TemplateManager interface {
 }
 
 /* the implementation of the above */
-type TemplateResources struct {
+type Templated struct {
 	/* locking for the manager */
 	sync.RWMutex
 	/* a map of the current resources */
 	resources map[string]*Template
+	/* the discovery service */
+	discovery discovery.Discovery
+	/* the client for the k/v store */
+	kv kv.KVStore
 }
 
 type TemplateUpdateEvent struct {
@@ -54,14 +59,14 @@ type Template struct {
 }
 
 /* create a new template manager */
-func NewTemplateManager(discovery discovery.Discovery) TemplateManager {
-	glog.Infof("Creating a new Template Manager, discovey service: %s", discovery)
+func NewTemplateStore() TemplatedStore {
+	glog.Infof("Creating a new Template Manager, store: %s", kv_store_url )
 
 	return nil
 }
 
 /* check if the template exists */
-func (r *TemplateResources) IsTemplate(path string) bool {
+func (r *Templated) IsTemplate(path string) bool {
 	r.RLock()
 	defer r.RUnlock()
 	if _, found := r.resources[path]; found {
@@ -70,7 +75,7 @@ func (r *TemplateResources) IsTemplate(path string) bool {
 	return false
 }
 
-func (r *TemplateResources) AddTemplate(path string, content string) error {
+func (r *Templated) AddTemplate(path string, content string) error {
 	glog.V(VERBOSE_LEVEL).Infof("Adding a new template: %s, content: %s", path, content)
 	if r.IsTemplate(path) {
 		glog.Errorf("The template: %s already exist", path)
@@ -87,7 +92,7 @@ func (r *TemplateResources) AddTemplate(path string, content string) error {
 }
 
 /* remove a template and any resources from the manager */
-func (r *TemplateResources) RemoveTemplate(path string) error {
+func (r *Templated) RemoveTemplate(path string) error {
 	glog.V(VERBOSE_LEVEL).Infof("Removing the template resource: %s from manager", path)
 	if !r.IsTemplate(path) {
 		glog.Errorf("The template: %s does not exists in the manager", path)
