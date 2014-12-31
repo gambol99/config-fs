@@ -21,8 +21,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
@@ -93,12 +93,12 @@ type StoreFS struct {
 func NewStoreFS() FileStore {
 	store := new(StoreFS)
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
-		glog.Errorf("Failed to create a file system watcher, error: %s", err )
+		glog.Errorf("Failed to create a file system watcher, error: %s", err)
 		return nil
 	} else {
 		store.watcher = watcher
 	}
-	store.watchedDirectories = make(map[string]bool,0)
+	store.watchedDirectories = make(map[string]bool, 0)
 	return store
 }
 
@@ -320,56 +320,56 @@ func (r *StoreFS) Touch(path string) error {
 	return nil
 }
 
-func (r *StoreFS) ListDirectories(path string) ([]string,error) {
-	paths := make([]string,0)
+func (r *StoreFS) ListDirectories(path string) ([]string, error) {
+	paths := make([]string, 0)
 	if err := filepath.Walk(path, (filepath.WalkFunc)(func(file_path string, info os.FileInfo, err error) error {
-			if err != nil {
-				glog.Errorf("Failed to walk the directory: %s", file_path )
-				return err
+		if err != nil {
+			glog.Errorf("Failed to walk the directory: %s", file_path)
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name != "." && name != ".." {
+				return filepath.SkipDir
 			}
-			if info.IsDir() {
-				name := info.Name()
-				if name != "." && name != ".." {
-					return filepath.SkipDir
-				}
-				paths = append(paths, file_path)
-			}
-			return nil
-		})); err != nil {
-		glog.Errorf("Failed to walk the directory: %s, error: %s", path, err )
+			paths = append(paths, file_path)
+		}
+		return nil
+	})); err != nil {
+		glog.Errorf("Failed to walk the directory: %s, error: %s", path, err)
 		return nil, err
 	}
 	return paths, nil
 }
 
 func (r *StoreFS) AddDirectoryWatch(path string) error {
-	glog.V(VERBOSE_LEVEL).Infof("Adding directory watch on directory: %s", path )
+	glog.V(VERBOSE_LEVEL).Infof("Adding directory watch on directory: %s", path)
 	/* step: check the directory actually exists */
 	if !r.IsDirectory(path) {
-		glog.Errorf("Failed to add directory watch on: %s, directory does not exist", path )
+		glog.Errorf("Failed to add directory watch on: %s, directory does not exist", path)
 		return DirectoryDoesNotExistErr
 	}
 	/* check if the directory is already being watched */
 	if _, found := r.watchedDirectories[path]; found {
-		glog.V(VERBOSE_LEVEL).Infof("The directory: %s is already being watched, skipping for now", path )
+		glog.V(VERBOSE_LEVEL).Infof("The directory: %s is already being watched, skipping for now", path)
 	}
 
 	/* step: add the directory and all subdirectores to the watcher */
 	if err := r.watcher.Add(path); err != nil {
-		glog.Errorf("Failed to add a watcher on the directory: %s, error: %s", path, err )
+		glog.Errorf("Failed to add a watcher on the directory: %s, error: %s", path, err)
 		return err
 	} else {
 		/* step: add to the list of watcher directories */
 		r.AddDirectoryWatch(path)
 		/* step: we need to get a list of subdirectories */
 		if paths, err := r.ListDirectories(path); err != nil {
-			glog.Errorf("Failed to get a list of subdirectories from path: %s, error: %s", path, err )
+			glog.Errorf("Failed to get a list of subdirectories from path: %s, error: %s", path, err)
 			return err
 		} else {
 			/* step: we iterate the folder and add a watch on each directory */
 			for _, subdirectory := range paths {
 				if err := r.AddDirectoryWatch(subdirectory); err != nil {
-					glog.Errorf("Failed to add a watch on the subdirectory: %s", subdirectory )
+					glog.Errorf("Failed to add a watch on the subdirectory: %s", subdirectory)
 				}
 			}
 		}
@@ -385,7 +385,6 @@ func (r *StoreFS) AddDirectoryWatched(path string) {
 
 /* remove the directory watch */
 func (r *StoreFS) RemoveDirectoryWatch(path string) error {
-
 
 	return nil
 }

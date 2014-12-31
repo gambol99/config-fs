@@ -17,13 +17,17 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/gambol99/config-fs/store/kv"
 	"github.com/gambol99/config-fs/store/discovery"
+	"github.com/gambol99/config-fs/store/kv"
 	"github.com/golang/glog"
+	"strings"
 )
+
+const TEMPLATED_PREFIX = "$TEMPLATE$"
 
 /* the template resource manager interface */
 type TemplatedStore interface {
+	IsTemplatedFile(path string, content string) bool
 	/* check if the path is a template */
 	IsTemplate(path string) bool
 	/* add a new template to the manager */
@@ -54,15 +58,26 @@ type TemplateUpdateEvent struct {
 type TemplateUpdateChannel chan TemplateUpdateEvent
 
 type Template struct {
+	/* the path of the file */
+	path string
 	/* the actual template */
 	content string
 }
 
 /* create a new template manager */
 func NewTemplateStore() TemplatedStore {
-	glog.Infof("Creating a new Template Manager, store: %s", kv_store_url )
+	glog.Infof("Creating a new Template Manager, store: %s", kv_store_url)
 
 	return nil
+}
+
+/* checks to see if the content of a key pair is templated */
+func (r *Templated) IsTemplatedFile(path string, content string) bool {
+	if strings.HasPrefix(content, TEMPLATED_PREFIX) {
+		glog.V(VERBOSE_LEVEL).Infof("Found templated content in file: %s", path )
+		return true
+	}
+	return false
 }
 
 /* check if the template exists */
