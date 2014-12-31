@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"net/url"
+	"fmt"
 	"time"
 
 	"github.com/gambol99/config-fs/store/discovery"
@@ -27,8 +28,9 @@ import (
 /* --- command line options ---- */
 var (
 	kv_store_url, mount_point *string
-	delete_on_exit            *bool
+	delete_on_exit, read_only *bool
 	refresh_interval          *int
+
 )
 
 func init() {
@@ -36,6 +38,7 @@ func init() {
 	mount_point = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
 	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
+	read_only = flag.Bool("readonly", DEFAULT_READ_ONLY, "wheather or not the config store of read-only")
 }
 
 /*
@@ -96,14 +99,12 @@ func NewStore() (Store, error) {
 	return store, nil
 }
 
-/* converts the k/v path to the full path on disk - essentially mount_point + node_path */
-func (r *ConfigurationStore) FullPath(path string) string {
-	return *mount_point + path
+func (r *ConfigurationStore) Close() {
+	glog.Infof("Request to shutdown and release the resources")
+	r.Shutdown <- true
 }
 
-/*
-Synchronize the key/value store with the configuration directory
-*/
+/* Synchronize the key/value store with the configuration directory */
 func (r *ConfigurationStore) Synchronize() error {
 	/* step: start by performing a initial config build */
 	glog.Infof("Synchronize() starting the sychronization between mount: %s and store: %s", *mount_point, *kv_store_url)
@@ -137,10 +138,10 @@ func (r *ConfigurationStore) Synchronize() error {
 			select {
 			case event := <-NodeChannel:
 				go r.HandleNodeEvent(event)
-			case <-TimerChannel.C:
-				go r.HandleTimerEvent()
 			case event := <-TemplateChannel:
 				go r.HandleTemplateEvent(event)
+			case <-TimerChannel.C:
+				go r.HandleTimerEvent()
 			case <-r.Shutdown:
 				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down")
 				break
@@ -150,67 +151,91 @@ func (r *ConfigurationStore) Synchronize() error {
 	return nil
 }
 
+/* ============== EVENT HANDLING ================= */
+
 /* Handle a change to the templated resource */
 func (r *ConfigurationStore) HandleTemplateEvent(event TemplateUpdateEvent) {
-
+	glog.V(VERBOSE_LEVEL).Infof("HandleTemplateEvent() recieved node event: %s, resynchronizing", event)
 }
 
-/*
-We have a timer event, let force re-sync the configuration
-*/
+/* We have a timer event, let force re-sync the configuration */
 func (r *ConfigurationStore) HandleTimerEvent() {
-	glog.V(5).Infof("ProcessTimerEvent() recieved ticker event , kicking off a synchronization")
+	glog.V(VERBOSE_LEVEL).Infof("HandleTimerEvent() recieved ticker event , kicking off a synchronization")
 
 }
 
-/*
-Handle changes to the K/V store and reflect in the directory
-*/
+/* Handle changes to the K/V store and reflect in the directory */
 func (r *ConfigurationStore) HandleNodeEvent(event kv.NodeChange) {
-	glog.V(5).Infof("ProcessNodeEvent() recieved node event: %s, resynchronizing", event)
+	glog.V(VERBOSE_LEVEL).Infof("HandleNodeEvent() recieved node event: %s, synchronizing", event)
+	node := event.Node
 	/* check: an update or deletion */
 	switch event.Operation {
 	case kv.DELETED:
-		r.ProcessNodeDeletion(event.Node)
+		if node.IsDir() {
+			r.DeleteStoreConfigDirectory(node.Path)
+		} else if node.IsFile() {
+			r.DeleteStoreConfigFile(node.Path)
+		}
 	case kv.CHANGED:
 		r.ProcessNodeUpdate(event.Node)
 	default:
-		glog.Errorf("ProcessTimerEvent() unknown operation, skipping the event: %s", event)
+		glog.Errorf("HandleNodeEvent() unknown operation, skipping the event: %s", event)
 	}
 }
 
-func (r *ConfigurationStore) ProcessNodeDeletion(node kv.Node) error {
-	fullPath := r.FullPath(node.Path)
-	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeDeletion() node: %s, path: %s", node, fullPath)
-	switch {
-	case node.IsDir():
-		glog.V(VERBOSE_LEVEL).Infof("Deleting the directory: %s", fullPath)
-		/* step: check it is a actual directory */
-		if _, err := r.CheckDirectory(fullPath); err != nil {
-			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
+/* ============= K/V Updates and changes ================ */
+
+/* Delete a file from the config store */
+func (r *ConfigurationStore) DeleteStoreConfigFile(path string) error {
+	/* the actual file system path */
+	full_path := r.FullPath(path)
+	glog.V(VERBOSE_LEVEL).Infof("DeleteStoreConfigFile() Deleting configuration file: %s from the store", full_path )
+	/* step: check it exists and is a file */
+	if !r.Exists(full_path) || !r.IsFile(full_path) {
+		glog.Errorf("Failed to delete file: %s, either it doesnt exists or is not a file", full_path )
+		return errors.New("Failed to delete, either it doesnt exists or is not a file")
+	}
+	/* check: is the file a templated resource */
+	if r.Resources.IsTemplate(path) {
+		glog.V(VERBOSE_LEVEL).Infof("Deleting the templated resource: %s", full_path )
+		/* step: free up the resources from the resource manager */
+		r.Resources.RemoveTemplate(path)
+		/* step: delete the actual file */
+		if err := r.Delete(full_path); err != nil {
+			glog.Errorf("Failed to delete the file: %s, error: %s", full_path, err )
 			return err
 		}
-		/* step: attempt to remove it */
-		if err := r.Rmdir(fullPath); err != nil {
-			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
-		}
-	case node.IsFile():
-		glog.V(VERBOSE_LEVEL).Infof("Deleting the file: %s", fullPath)
-		if r.Exists(fullPath) && r.IsFile(fullPath) {
-			if err := r.Delete(fullPath); err != nil {
-				glog.Errorf("Failed to delete the file: %s, error: %s", fullPath, err)
-				return err
-			}
-			glog.V(VERBOSE_LEVEL).Infof("Successfully deleted the file: %s", fullPath)
-		} else {
-			glog.Errorf("Failed to delete the file: %s, the file doesnt exist or is not a file", fullPath)
-			return errors.New("Failed to delete the file, either not a file or does not exist")
-		}
-	default:
-		return errors.New("Unknown node type, neither file or directory")
+	}
+	/* step: delete the file */
+	if err := r.Delete(full_path); err != nil {
+		glog.Errorf("Failed to delete the file: %s, error: %s", full_path, err )
+		return err
 	}
 	return nil
 }
+
+func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
+	/* the actual file system path */
+	full_path := r.FullPath(path)
+	glog.V(VERBOSE_LEVEL).Infof("DeleteStoreConfigDirectory() Deleting configuration directory: %s from the store", full_path )
+	/* step: check it is a actual directory */
+	if _, err := r.CheckDirectory(full_path); err != nil {
+		glog.Errorf("Failed to remove the directory: %s, error: %s", full_path, err)
+		return err
+	}
+	/* @TODO step: we need to remove any watches on the filesystem */
+
+	/* @TODO step: we need to remove any templated resources which were in the directory */
+
+
+	/* step: delete the directory and all the children */
+	if err := r.RmDir(full_path); err != nil {
+		glog.Errorf("Failed to delete the directory: %s, error: %s", full_path, err )
+		return err
+	}
+	return nil
+}
+
 
 /* A node has been change, altered or created */
 func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
@@ -236,6 +261,13 @@ func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
 		}
 	}
 	return nil
+}
+
+/* ======= MISC ========== */
+
+/* Converts the k/v path to the full path on disk - essentially mount_point + node_path */
+func (r *ConfigurationStore) FullPath(path string) string {
+	return fmt.Sprintf("%s%s", *mount_point, path )
 }
 
 func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
@@ -268,13 +300,13 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			switch {
 			case node.IsFile():
 				/* step: if the file does not exist, create it */
-				Verbose("BuildDirectory() Creating the file: %s", path)
+				glog.V(VERBOSE_LEVEL).Infof("BuildDirectory() Creating the file: %s", path)
 				if err := r.Create(path, node.Value); err != nil {
 					glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 				}
 			case node.IsDir():
 				if r.Exists(path) == false {
-					Verbose("BuildDiectory() creating directory item: %s", path)
+					glog.V(VERBOSE_LEVEL).Infof("BuildDiectory() creating directory item: %s", path)
 					r.Mkdir(path)
 				}
 				/* go recursive and build the contents of that directory */
@@ -287,7 +319,3 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 	return nil
 }
 
-func (r *ConfigurationStore) Close() {
-	glog.Infof("Request to shutdown and release the resources")
-	r.Shutdown <- true
-}

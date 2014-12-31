@@ -17,5 +17,6 @@ const (
 	DEFAULT_KV_STORE       = "etcd://localhost:4001"
 	DEFAULT_MOUNT_POINT    = "/config"
 	DEFAULT_DELETE_ON_EXIT = false
+	DEFAULT_READ_ONLY      = true
 	DEFAULT_INTERVAL       = 900
 )

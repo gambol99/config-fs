@@ -157,7 +157,7 @@ func (r *EtcdStoreClient) Watch(key string, updateChannel NodeUpdateChannel) (ch
 				continue
 			}
 			/* step: pass the change upstream */
-			Verbose("Watch() sending the change for key: %s upstream", key)
+			Verbose("Watch() sending the change for key: %s upstream, event: %v", key, response )
 			updateChannel <- r.GetNodeEvent(response)
 		}
 	}()
