@@ -11,11 +11,7 @@ VERSION=$(shell awk '/const Version/ { print $$4 }' version.go | sed 's/"//g')
 build:
 	godep go build -o stage/${NAME}
 
-test:
-	godep go test
-
-docker:
-	go build
+docker: build
 	docker build -t ${AUTHOR}/${NAME} .
 
 clean:
@@ -24,6 +20,8 @@ clean:
 
 changelog:
 	git log $(shell git tag | tail -n1)..HEAD --no-merges --format=%B > changelog
+
+all: clean changelog build docker
 
 release:
 	rm -rf release
