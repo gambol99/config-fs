@@ -73,8 +73,7 @@ type StoreFileSystem interface {
 	Dirname(path string) string
 }
 
-type StoreFS struct {
-}
+type StoreFS struct{}
 
 func NewStoreFS() StoreFileSystem {
 	return &StoreFS{}
@@ -292,7 +291,7 @@ func (r *StoreFS) Touch(path string) error {
 		return FileDoesNotExistErr
 	}
 	if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
-		glog.Errorf("Failed to update stats on file: %s, error: %s", path, err )
+		glog.Errorf("Failed to update stats on file: %s, error: %s", path, err)
 		return err
 	}
 	return nil

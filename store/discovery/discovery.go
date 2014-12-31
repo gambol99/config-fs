@@ -57,6 +57,12 @@ type DiscoveryService struct {
 	StopChannels map[string]chan bool
 }
 
+func NewDiscoveryService() Discovery {
+	return &DiscoveryService{
+		Providers:    make(map[string]agent.DiscoveryAgent, 0),
+		StopChannels: make(map[string]chan bool, 0)}
+}
+
 func (r *DiscoveryService) ListProviders() []string {
 	r.RLock()
 	defer r.RUnlock()

@@ -14,11 +14,11 @@ limitations under the License.
 package templates
 
 import (
-	"sync"
 	"errors"
+	"sync"
 
-	"github.com/golang/glog"
 	"github.com/gambol99/config-fs/store/discovery"
+	"github.com/golang/glog"
 )
 
 const (
@@ -43,14 +43,23 @@ type TemplateResources struct {
 	resources map[string]*Template
 }
 
+type TemplateUpdateEvent struct {
+	/* the path of the template resource */
+	path string
+	/* the content of the resource */
+	content string
+}
+
+type TemplateUpdateChannel chan TemplateUpdateEvent
+
 type Template struct {
 	/* the actual template */
-	content	string
+	content string
 }
 
 /* create a new template manager */
 func NewTemplateManager(discovery discovery.Discovery) TemplateManager {
-	glog.Infof("Creating a new Template Manager, discovey service: %s", discovery )
+	glog.Infof("Creating a new Template Manager, discovey service: %s", discovery)
 
 	return nil
 }
@@ -66,16 +75,16 @@ func (r *TemplateResources) IsTemplate(path string) bool {
 }
 
 func (r *TemplateResources) AddTemplate(path string, content string) error {
-	glog.V(VERBOSE_LEVEL).Infof("Adding a new template: %s, content: %s", path, content )
+	glog.V(VERBOSE_LEVEL).Infof("Adding a new template: %s, content: %s", path, content)
 	if r.IsTemplate(path) {
-		glog.Errorf("The template: %s already exist", path )
+		glog.Errorf("The template: %s already exist", path)
 		return nil
 	}
 	/* step: we need to create a template for this
-		- we read in the template content
-		- we generate the content
-		- we create watches on the keys / services
-		- and we update the store with a notification when the template changes
+	- we read in the template content
+	- we generate the content
+	- we create watches on the keys / services
+	- and we update the store with a notification when the template changes
 	*/
 
 	return nil
@@ -83,9 +92,9 @@ func (r *TemplateResources) AddTemplate(path string, content string) error {
 
 /* remove a template and any resources from the manager */
 func (r *TemplateResources) RemoveTemplate(path string) error {
-	glog.V(VERBOSE_LEVEL).Infof("Removing the template resource: %s from manager", path )
+	glog.V(VERBOSE_LEVEL).Infof("Removing the template resource: %s from manager", path)
 	if !r.IsTemplate(path) {
-		glog.Errorf("The template: %s does not exists in the manager", path )
+		glog.Errorf("The template: %s does not exists in the manager", path)
 		return errors.New("The template resource does not exist")
 	}
 

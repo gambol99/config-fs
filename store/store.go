@@ -16,11 +16,12 @@ package store
 import (
 	"errors"
 	"flag"
-	"time"
 	"net/url"
+	"time"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
+	"github.com/gambol99/config-fs/store/templates"
 	"github.com/golang/glog"
 )
 
@@ -40,7 +41,7 @@ func init() {
 
 /*
 The interface to the config-fs
- */
+*/
 type Store interface {
 	/* perform synchronization between the mount point and the kv store */
 	Synchronize() error
@@ -50,26 +51,31 @@ type Store interface {
 
 /*
 The implementation of the above
- */
+*/
 type ConfigurationStore struct {
+	StoreFileSystem
 	/* the k/v agent for the store */
 	KV kv.KVStore
-	/* fs implementation */
-	FileFS StoreFileSystem
 	/* discovery agent */
 	Agent discovery.Discovery
+	/* the template manager */
+	Resources templates.TemplateManager
 	/* the shutdown signal */
 	Shutdown chan bool
 }
 
 /*
 Create a new configuration store
- */
+*/
 func NewStore() (Store, error) {
 	glog.Infof("Creating a new configuration store, mountpoint: %s, kv: %s", *mount_point, *kv_store_url)
-	store := new(ConfigurationStore)
+	store := &ConfigurationStore{NewStoreFS(), nil, nil, nil, nil}
+	/* the shutdown signal for the store */
 	store.Shutdown = make(chan bool, 1)
-	store.FileFS = NewStoreFS()
+	/* the discovery manager */
+	store.Agent = discovery.NewDiscoveryService()
+	/* the resource manager */
+	store.Resources = templates.NewTemplateManager(store.Agent)
 	/* step: parse the url */
 	uri, err := url.Parse(*kv_store_url)
 	if err != nil {
@@ -86,7 +92,7 @@ func NewStore() (Store, error) {
 			store.KV = agent
 		}
 	default:
-		return nil, errors.New("Unsupported key/value store: "+*kv_store_url)
+		return nil, errors.New("Unsupported key/value store: " + *kv_store_url)
 	}
 	return store, nil
 }
@@ -98,7 +104,7 @@ func (r *ConfigurationStore) FullPath(path string) string {
 
 /*
 Synchronize the key/value store with the configuration directory
- */
+*/
 func (r *ConfigurationStore) Synchronize() error {
 	/* step: start by performing a initial config build */
 	glog.Infof("Synchronize() starting the sychronization between mount: %s and store: %s", *mount_point, *kv_store_url)
@@ -108,17 +114,19 @@ func (r *ConfigurationStore) Synchronize() error {
 	}
 
 	/* step: jump into the event loop; we wait for
-		- a change to occur in the K/V store
-		- a timer event to occur and enforce a refresh of the config
-		- a notification of file changes on the config directory
-		- a shutdown signal to occur
-	 */
+	- a change to occur in the K/V store
+	- a timer event to occur and enforce a refresh of the config
+	- a notification of file changes on the config directory
+	- a template resource has changed and we need to update the config store
+	- a shutdown signal to occur
+	*/
 	go func() {
 		/* step: create the timer */
 		TimerChannel := time.NewTicker(time.Duration(*refresh_interval) * time.Second)
-
 		/* step: create the watch on the base */
 		NodeChannel := make(kv.NodeUpdateChannel, 1)
+		/* step: create a channel for sending updates on template resources */
+		TemplateChannel := make(templates.TemplateUpdateChannel, 0)
 
 		/* step: create a watch of the K/V */
 		if _, err := r.KV.Watch("/", NodeChannel); err != nil {
@@ -132,6 +140,8 @@ func (r *ConfigurationStore) Synchronize() error {
 				go r.HandleNodeEvent(event)
 			case <-TimerChannel.C:
 				go r.HandleTimerEvent()
+			case event := <-TemplateChannel:
+				go r.HandleTemplateEvent(event)
 			case <-r.Shutdown:
 				glog.Infof("Synchronize() recieved the shutdown signal :-( ... shutting down")
 				break
@@ -139,6 +149,11 @@ func (r *ConfigurationStore) Synchronize() error {
 		}
 	}()
 	return nil
+}
+
+/* Handle a change to the templated resource */
+func (r *ConfigurationStore) HandleTemplateEvent(event templates.TemplateUpdateEvent) {
+
 }
 
 /*
@@ -172,18 +187,18 @@ func (r *ConfigurationStore) ProcessNodeDeletion(node kv.Node) error {
 	case node.IsDir():
 		glog.V(VERBOSE_LEVEL).Infof("Deleting the directory: %s", fullPath)
 		/* step: check it is a actual directory */
-		if _, err := r.IsDirectory(fullPath); err != nil {
+		if _, err := r.CheckDirectory(fullPath); err != nil {
 			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
 			return err
 		}
 		/* step: attempt to remove it */
-		if err := r.FileFS.Rmdir(fullPath); err != nil {
+		if err := r.Rmdir(fullPath); err != nil {
 			glog.Errorf("Failed to remove the directory: %s, error: %s", fullPath, err)
 		}
 	case node.IsFile():
 		glog.V(VERBOSE_LEVEL).Infof("Deleting the file: %s", fullPath)
-		if r.FileFS.Exists(fullPath) && r.FileFS.IsFile(fullPath) {
-			if err := r.FileFS.Delete(fullPath); err != nil {
+		if r.Exists(fullPath) && r.IsFile(fullPath) {
+			if err := r.Delete(fullPath); err != nil {
 				glog.Errorf("Failed to delete the file: %s, error: %s", fullPath, err)
 				return err
 			}
@@ -202,21 +217,21 @@ func (r *ConfigurationStore) ProcessNodeDeletion(node kv.Node) error {
 func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
 	fullPath := r.FullPath(node.Path)
 	glog.V(VERBOSE_LEVEL).Infof("ProcessNodeUpdate() node: %s, path: %s", node, fullPath)
-	parentDirectory := r.FileFS.Dirname(fullPath)
+	parentDirectory := r.Dirname(fullPath)
 	switch {
 	case node.IsDir():
 		/* step: we need to make sure the directory structure exists */
-		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
+		if err := r.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
 		}
 	case node.IsFile():
-		if err := r.FileFS.Mkdirp(parentDirectory); err != nil {
+		if err := r.Mkdirp(parentDirectory); err != nil {
 			glog.Errorf("Failed to ensure the directory: %s, error: %s", parentDirectory, err)
 			return err
 		}
 		/* step: create the file */
-		if err := r.FileFS.Create(fullPath, node.Value); err != nil {
+		if err := r.Create(fullPath, node.Value); err != nil {
 			glog.Errorf("Failed to create the file: %s, error: %s", fullPath, err)
 			return err
 		}
@@ -224,11 +239,11 @@ func (r *ConfigurationStore) ProcessNodeUpdate(node kv.Node) error {
 	return nil
 }
 
-func (r *ConfigurationStore) IsDirectory(path string) (bool, error) {
-	if r.FileFS.Exists(path) == false {
+func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
+	if r.Exists(path) == false {
 		return false, DirectoryDoesNotExistErr
 	}
-	if r.FileFS.IsDirectory(path) == false {
+	if r.IsDirectory(path) == false {
 		return false, IsNotDirectoryErr
 	}
 	return true, nil
@@ -255,13 +270,13 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			case node.IsFile():
 				/* step: if the file does not exist, create it */
 				Verbose("BuildDirectory() Creating the file: %s", path)
-				if err := r.FileFS.Create(path, node.Value); err != nil {
+				if err := r.Create(path, node.Value); err != nil {
 					glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 				}
 			case node.IsDir():
-				if r.FileFS.Exists(path) == false {
+				if r.Exists(path) == false {
 					Verbose("BuildDiectory() creating directory item: %s", path)
-					r.FileFS.Mkdir(path)
+					r.Mkdir(path)
 				}
 				/* go recursive and build the contents of that directory */
 				if err := r.BuildDirectory(node.Path); err != nil {
