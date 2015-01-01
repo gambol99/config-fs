@@ -282,7 +282,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 	if r.templated.IsTemplatedFile(path, value) {
 		glog.V(VERBOSE_LEVEL).Infof("Found templated content in file: %s, create resource", path)
 		if err := r.templated.AddTemplate(path, value); err != nil {
-			glog.Errorf("Failed to create a templated resource from file: %s, error: %s", path, error)
+			glog.Errorf("Failed to create a templated resource from file: %s, error: %s", path, err )
 			return err
 		}
 	} else {
