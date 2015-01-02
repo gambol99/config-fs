@@ -21,6 +21,8 @@ const (
 	AGENT_VERBOSE_LEVEL = 6
 )
 
+type ServiceUpdateChannel chan *Service
+
 func Verbose(message string, args ...interface{}) {
 	glog.V(AGENT_VERBOSE_LEVEL).Infof(message, args)
 }
@@ -29,7 +31,7 @@ type DiscoveryAgent interface {
 	/* search for service which match the filter */
 	FindServices(filter string) ([]Service, error)
 	/* notify my channel of updates to services */
-	WatchServices(services *Service, updateChannel chan *Service) (chan bool, error)
+	WatchServices(services *Service, updateChannel ServiceUpdateChannel) (chan bool, error)
 }
 
 type Service struct {

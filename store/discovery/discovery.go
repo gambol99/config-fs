@@ -32,6 +32,8 @@ func init() {
 	discovery_url = flag.String("discovery", "", "the service discovery backend being used")
 }
 
+
+
 /*
    The Discovery service is a binding between X service discovery providers (i.e. consul, skydns, discoverd etc)
 */
@@ -41,7 +43,7 @@ type Discovery interface {
 	/* Retrieve a list of services */
 	FindServices(provider string, name string) ([]agent.Service, error)
 	/* Watch for changes on a service and report back */
-	WatchService(provider string, service *agent.Service, updateChannel chan *agent.Service) (chan bool, error)
+	WatchService(provider string, service *agent.Service, updateChannel agent.ServiceUpdateChannel) (chan bool, error)
 	/* Close the service down */
 	Close() error
 }
@@ -92,7 +94,7 @@ func (r *DiscoveryService) FindServices(provider string, name string) ([]agent.S
 	}
 }
 
-func (r *DiscoveryService) WatchService(provider string, service *agent.Service, updateChannel chan *agent.Service) (chan bool, error) {
+func (r *DiscoveryService) WatchService(provider string, service *agent.Service, updateChannel agent.ServiceUpdateChannel) (chan bool, error) {
 	r.Lock()
 	defer r.Unlock()
 	if provider, found := r.Providers[provider]; found {
