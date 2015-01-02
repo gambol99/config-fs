@@ -21,9 +21,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/golang/glog"
-	"time"
 )
 
 const (
@@ -44,7 +44,7 @@ var (
 	IsNotDirectoryErr        = errors.New("The path is not a directory")
 )
 
-type StoreFileSystem interface {
+type FileStore interface {
 	/* create a file from a k/v */
 	Create(path string, value string) error
 	/* update the file */
@@ -71,13 +71,15 @@ type StoreFileSystem interface {
 	Touch(path string) error
 	/* parent directory */
 	Dirname(path string) string
+
 }
 
 type StoreFS struct {
+
 }
 
-func NewStoreFS() StoreFileSystem {
-	return &StoreFS{}
+func NewStoreFS() FileStore {
+	return new(StoreFS)
 }
 
 func (r *StoreFS) Create(path string, value string) error {
@@ -292,8 +294,31 @@ func (r *StoreFS) Touch(path string) error {
 		return FileDoesNotExistErr
 	}
 	if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
-		glog.Errorf("Failed to update stats on file: %s, error: %s", path, err )
+		glog.Errorf("Failed to update stats on file: %s, error: %s", path, err)
 		return err
 	}
 	return nil
 }
+
+func (r *StoreFS) ListDirectories(path string) ([]string, error) {
+	paths := make([]string, 0)
+	if err := filepath.Walk(path, (filepath.WalkFunc)(func(file_path string, info os.FileInfo, err error) error {
+		if err != nil {
+			glog.Errorf("Failed to walk the directory: %s", file_path)
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name != "." && name != ".." {
+				return filepath.SkipDir
+			}
+			paths = append(paths, file_path)
+		}
+		return nil
+	})); err != nil {
+		glog.Errorf("Failed to walk the directory: %s, error: %s", path, err)
+		return nil, err
+	}
+	return paths, nil
+}
+

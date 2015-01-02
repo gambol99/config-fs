@@ -46,7 +46,7 @@ func (r *ConsulServiceAgent) FindServices(filter string) ([]Service, error) {
 	return endpoints, nil
 }
 
-func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel chan *Service) (chan bool, error) {
+func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel ServiceUpdateChannel) (chan bool, error) {
 	Verbose("WatchServices() watching for changes to service: %s, channel: %V", service, updateChannel)
 	shutdownChannel := make(chan bool)
 	go func() {
