@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+	"strings"
 
 	"github.com/gambol99/config-fs/store/kv"
+	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
-	"strings"
 )
 
 const (
@@ -119,7 +120,6 @@ func (r *ConfigurationStore) Synchronize() error {
 		glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 		return err
 	}
-
 	/* step: jump into the event loop; we wait for
 	- a change to occur in the K/V store
 	- a timer event to occur and enforce a refresh of the config
@@ -135,7 +135,7 @@ func (r *ConfigurationStore) Synchronize() error {
 		/* step: create a channel for sending updates on template resources */
 		TemplateChannel := make(TemplateUpdateChannel, 5)
 		/* step: file system notification channel */
-		FileNotifyChannel := make(chan bool, 5)
+		FileNotifyChannel := make(chan *fsnotify.Event, 5)
 
 		/* step: create a watch of the K/V */
 		if _, err := r.kv.Watch("/", ConfigUpdateChannel); err != nil {
@@ -165,13 +165,33 @@ func (r *ConfigurationStore) Synchronize() error {
 
 /* ============== EVENT HANDLING ================= */
 
-func (r *ConfigurationStore) HandleFileNotificationEvent(event interface{}) {
+func (r *ConfigurationStore) HandleFileNotificationEvent(event *fsnotify.Event) {
+	glog.V(VERBOSE_LEVEL).Infof("HandleFileNotificationEvent() event: %s", event )
 
 }
 
 /* Handle a change to the templated resource */
-func (r *ConfigurationStore) HandleTemplateEvent(event string) {
-	glog.V(VERBOSE_LEVEL).Infof("HandleTemplateEvent() recieved node event: %s, resynchronizing", event)
+func (r *ConfigurationStore) HandleTemplateEvent(path string) {
+	glog.V(VERBOSE_LEVEL).Infof("HandleTemplateEvent() recieved node event: %s, resynchronizing", path)
+	if resource, found := r.IsTemplated(path); !found {
+		glog.Errorf("The resource for path: %s no longer exists, internal error", path )
+		return
+	} else {
+		/* step: we get the content of the template */
+		content, err := resource.Render()
+		if err != nil {
+			glog.Errorf("Failed to generate the content from template: %s, error: %s", path, err )
+			return
+		}
+		/* step: get the file system path */
+		full_path := r.FullPath(path)
+		/* step: update the content of the file */
+		glog.V(VERBOSE_LEVEL).Infof("Updating the content for template: %s", path )
+		if err := r.fs.Create(full_path, content); err != nil {
+			glog.Errorf("Failed to update the template: %s, error: %s", full_path, err)
+			return
+		}
+	}
 }
 
 /* We have a timer event, let force re-sync the configuration */
@@ -223,11 +243,11 @@ func (r *ConfigurationStore) IsTemplatedContent(path, content string) bool {
 	return false
 }
 
-func (r *ConfigurationStore) CreateTemplatedResource(path, content string) error {
+func (r *ConfigurationStore) CreateTemplatedResource(path, content string) (string,error) {
 	glog.V(VERBOSE_LEVEL).Infof("Adding a new template: %s, content: %s", path, content)
 	if _, found := r.IsTemplated(path); found {
 		glog.Errorf("The template: %s already exist", path)
-		return nil
+		return "",nil
 	}
 	/* step: we need to create a template for this
 	- we read in the template content
@@ -235,10 +255,27 @@ func (r *ConfigurationStore) CreateTemplatedResource(path, content string) error
 	- we create watches on the keys / services
 	- and we update the store with a notification when the template changes
 	*/
+	if templ, err := NewTemplatedResource(path,content,r.kv); err != nil {
+		glog.Errorf("Failed to create the templated resournce: %s, error: %s", path, err )
+		return "",err
+	} else {
+		/* step: we render the content */
+		content, err := templ.Render()
+		if err != nil {
+			glog.Errorf("Failed to render the template: %s, error: %s", path, err )
+			return "",err
+		}
+		return content,nil
+	}
+}
 
-
-
-
+func (r *ConfigurationStore) DeleteTemplatedResource(path string) error {
+	if resource, found := r.templated[path]; found {
+		/* step: close the resource */
+		resource.Close()
+		/* step: we remove from the map */
+		delete(r.templated,path)
+	}
 	return nil
 }
 
@@ -255,10 +292,10 @@ func (r *ConfigurationStore) DeleteStoreConfigFile(path string) error {
 		return errors.New("Failed to delete, either it doesnt exists or is not a file")
 	}
 	/* check: is the file a templated resource */
-	if resource, found := r.IsTemplated(path); found {
+	if _, found := r.IsTemplated(path); found {
 		glog.V(VERBOSE_LEVEL).Infof("Deleting the templated resource: %s", full_path)
 		/* step: free up the resources from the resource manager */
-		resource.Close()
+		r.DeleteTemplatedResource(path)
 	}
 	/* step: delete the file */
 	if err := r.fs.Delete(full_path); err != nil {
@@ -305,7 +342,7 @@ func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
 	return nil
 }
 
-/* create a new file in the configuration store */
+/* create or update a file in the configuration store */
 func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) error {
 	/* the actual file system path */
 	full_path := r.FullPath(path)
@@ -316,12 +353,38 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 		glog.Errorf("Failed to ensure the directory: %s, error: %s", r.fs.Dirname(full_path), err)
 		return err
 	}
-	/* step: we need to check if the file is a templated resource */
-	if r.IsTemplatedContent(path, value) {
-		glog.V(VERBOSE_LEVEL).Infof("Found templated content in file: %s, create resource", path)
-		if err := r.CreateTemplatedResource(path, value); err != nil {
-			glog.Errorf("Failed to create a templated resource from file: %s, error: %s", path, err )
+	/* step: is the path a templated resource */
+
+	/* if this is true a templated resource already exists and the template content has been changed -
+	thus we need to update the content of the template
+		- delete the old templated resource
+		- create a new templated resource
+	*/
+	if _, found := r.IsTemplated(path); found {
+		/* step: delete the resource */
+		r.DeleteTemplatedResource(path)
+		/* step: recreate the template */
+		if content, err := r.CreateTemplatedResource(path, value); err != nil {
+			glog.Errorf("Failed to update the template for path: %s, error: %s", path, err )
 			return err
+		} else {
+			glog.V(VERBOSE_LEVEL).Infof("Updated the template for resource: %s", path )
+			if err := r.fs.Create(full_path, content); err != nil {
+				glog.Errorf("Failed to create the file: %s, error: %s", full_path, err)
+				return err
+			}
+		}
+	/* - A node has changed, its value has a templated resource prefix and hasn't already been created i.e. its a new template */
+	} else if r.IsTemplatedContent(path, value) {
+		glog.V(VERBOSE_LEVEL).Infof("Creating a new templated resource: %s", path )
+		if content, err := r.CreateTemplatedResource(path, value); err != nil {
+			glog.Errorf("Failed to create the template for path: %s, error: %s", path, err )
+			return err
+		} else {
+			if err := r.fs.Create(full_path, content); err != nil {
+				glog.Errorf("Failed to create the file: %s, error: %s", full_path, err)
+				return err
+			}
 		}
 	} else {
 		/* step: create the file */
@@ -369,9 +432,18 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			glog.V(5).Infof("BuildDirectory() directory: %s, full path: %s", directory, path)
 			switch {
 			case node.IsFile():
+				content := node.Value
 				/* step: if the file does not exist, create it */
 				glog.V(VERBOSE_LEVEL).Infof("BuildDirectory() Creating the file: %s", path)
-				if err := r.fs.Create(path, node.Value); err != nil {
+				/* step: check if the content is templated */
+				if r.IsTemplatedContent(path, node.Value) {
+					content, err = r.CreateTemplatedResource(path, node.Value)
+					if err != nil {
+						glog.Errorf("Failed to create the templated file: %s, error: %s", path, err )
+						continue
+					}
+				}
+				if err := r.fs.Create(path, content); err != nil {
 					glog.Errorf("Failed to create the file: %s, error: %s", path, err)
 				}
 			case node.IsDir():

@@ -32,18 +32,17 @@ func init() {
 	discovery_url = flag.String("discovery", "", "the service discovery backend being used")
 }
 
-
-
 /*
    The Discovery service is a binding between X service discovery providers (i.e. consul, skydns, discoverd etc)
 */
 type Discovery interface {
+	Exists(provider string) bool
 	/* A list of providers supported */
 	ListProviders() []string
 	/* Retrieve a list of services */
 	FindServices(provider string, name string) ([]agent.Service, error)
 	/* Watch for changes on a service and report back */
-	WatchService(provider string, service *agent.Service, updateChannel agent.ServiceUpdateChannel) (chan bool, error)
+	WatchService(provider string, service string, updateChannel agent.ServiceUpdateChannel) (chan bool, error)
 	/* Close the service down */
 	Close() error
 }
@@ -60,9 +59,28 @@ type DiscoveryService struct {
 }
 
 func NewDiscoveryService() Discovery {
-	return &DiscoveryService{
+	discovery := &DiscoveryService{
 		Providers:    make(map[string]agent.DiscoveryAgent, 0),
 		StopChannels: make(map[string]chan bool, 0)}
+
+	/* step: add the providers */
+	if agent, err := agent.NewConsulServiceAgent(*discovery_url); err != nil {
+		glog.Errorf("Failed to create the consul discovery agent, error: %s", err )
+		return nil
+	} else {
+		discovery.Providers["consul"] = agent
+		return discovery
+	}
+}
+
+/* check that a provider exists */
+func (r *DiscoveryService) Exists(provider string) bool {
+	r.RLock()
+	defer r.RUnlock()
+	if _, found := r.Providers[provider]; found {
+		return true
+	}
+	return false
 }
 
 func (r *DiscoveryService) ListProviders() []string {
@@ -94,19 +112,22 @@ func (r *DiscoveryService) FindServices(provider string, name string) ([]agent.S
 	}
 }
 
-func (r *DiscoveryService) WatchService(provider string, service *agent.Service, updateChannel agent.ServiceUpdateChannel) (chan bool, error) {
+func (r *DiscoveryService) WatchService(provider string, service string, updateChannel agent.ServiceUpdateChannel) (chan bool, error) {
 	r.Lock()
 	defer r.Unlock()
 	if provider, found := r.Providers[provider]; found {
+		definition := new(agent.Service)
+		definition.Name = service
+
 		glog.V(3).Infof("WatchService() provider: %s, service: %s, channel: %V", provider, service, updateChannel)
 		/* step: lets create the watch on the service */
-		stop_watch_channel, err := provider.WatchServices(service, updateChannel)
+		stop_watch_channel, err := provider.WatchServices(definition, updateChannel)
 		if err != nil {
 			glog.Errorf("WatchService() failed to watch service: %s, provider: %s", service, provider)
 			return nil, err
 		}
 		/* step: add the stop channel to the stop channel map */
-		r.StopChannels[service.Name] = stop_watch_channel
+		r.StopChannels[definition.Name] = stop_watch_channel
 		return stop_watch_channel, nil
 	} else {
 		return nil, InvalidProviderErr

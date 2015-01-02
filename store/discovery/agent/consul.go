@@ -110,6 +110,5 @@ func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) (service 
 	service.Name = svc.ServiceName
 	service.Address = svc.Address
 	service.Port = svc.ServicePort
-	service.Tags = svc.ServiceTags
 	return
 }

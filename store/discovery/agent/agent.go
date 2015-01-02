@@ -42,6 +42,4 @@ type Service struct {
 	Address string
 	/* the port the service is running on */
 	Port int
-	/* any tags related to the service */
-	Tags []string
 }
