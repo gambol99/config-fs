@@ -14,17 +14,19 @@ limitations under the License.
 package agent
 
 import (
+	"fmt"
+
 	"github.com/golang/glog"
 )
 
 const (
-	AGENT_VERBOSE_LEVEL = 6
+	VERBOSE_LEVEL = 6
 )
 
 type ServiceUpdateChannel chan *Service
 
 func Verbose(message string, args ...interface{}) {
-	glog.V(AGENT_VERBOSE_LEVEL).Infof(message, args)
+	glog.V(VERBOSE_LEVEL).Infof(message, args)
 }
 
 type DiscoveryAgent interface {
@@ -42,6 +44,8 @@ type Service struct {
 	Address string
 	/* the port the service is running on */
 	Port int
-	/* any tags related to the service */
-	Tags []string
+}
+
+func (s Service) String() string {
+	return fmt.Sprintf("id: %s, name: %s, address: %s:%d", s.ID, s.Name, s.Address, s.Port )
 }

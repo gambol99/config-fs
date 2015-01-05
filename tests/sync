@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+#
+#   Author: Rohith (gambol99@gmail.com)
+#   Date: 2015-01-02 16:43:44 +0000 (Fri, 02 Jan 2015)
+#
+#  vim:ts=2:sw=2:et
+#
+
+require 'optionscrapper'
+require 'etcd'
+
+module Etcd
+  module Sync
+    class CLI
+      def initialize
+        begin
+          parser.parse!
+          synchronize
+        rescue SystemExit => e
+          exit e.status
+        rescue Exception => e
+          parser.usage e.message
+        end
+      end
+
+      private
+      def parser
+        @parser ||= OptionScrapper.new do |o|
+          o.on('-H HOST', '--host HOST', "the etcd host you are syncrhonizing to (defaults to #{options[:host]})" ) { |x| options[:host] = x }
+          o.on('-p PORT', '--port PORT', "the port etcd is running on (defaults to #{options[:port]})" ) { |x| options[:port] = x.to_i }
+          o.on('-b DIRECTORY', '--base DIRECTORY', "the directory you wish to syncrhonize to etcd" ) { |x| options[:basedir] = x }
+          o.on('-P PREFIX', '--prefix PREFIX', "add the prefix to etcd keys, otherwise everthing is assumed as relative root") { |x| options[:prefix] = x }
+          o.on('-O', '--overwrite', "overwrite the content even if key exists (defaults #{options[:overwrite]})" )  { options[:overwrite] = true }
+          o.on('-v', '--verbose', "switch on verbose logging mode") { options[:verbose] = true }
+        end
+      end
+
+      def synchronize
+        # check we have everything we need
+        parser.usage "you have not specified the base directory to synchronize" unless options[:basedir]
+        parser.usage "the directory: #{options[:basedir]} does not exist" unless File.exist? options[:basedir]
+        parser.usage "the directory: #{options[:basedir]} is not a directory" unless File.directory? options[:basedir]
+        parser.usage "the directory: #{options[:basedir]} is not readable" unless File.readable? options[:basedir]
+        # step: sync the base and etcd
+        synchronize_directory options[:basedir]
+      end
+
+      def synchronize_directory path = "/"
+        key = path
+        verbose "synchronize_directory: path: #{path}"
+        # step: we get listing of the directory and iterate the directory
+        raise ArgumentError, "the path: #{path} is not a directory" unless File.directory? path
+        # step: check the path
+        key = path + "/" unless path.end_with? "/"
+        Dir.glob(key + "*").each do |x|
+          if File.directory? x
+            # step: we go recusive
+            verbose "processing the subdirectory: #{x}"
+            synchronize_directory(x)
+          else
+            if File.file? x and File.readable? x
+              # step: read in the file and sync to etcd
+              synchronzie_file x
+            end
+          end
+        end
+      end
+
+      def synchronzie_file path
+        # step: remove the directory element for the key
+        key = synchronize_key(path)
+        verbose "synchronzie_file: key #{key}, file: #{path}"
+        # step: if the key exists and overwrite is false, we skip
+        if etcd.exists? key and !options[:overwrite]
+          verbose "synchronzie_file: skipping file: #{path}, an entry already exists"
+          return
+        end
+        # step: read in the content of the file
+        content = ""
+        begin
+          verbose "synchronzie_file: file: #{path}, content: #{content}"
+          content = File.read(path)
+          # step: set the key
+          synchronize_set(key,content)
+        rescue Exception => e
+          verbose "Failed to read in the file: #{path}, error: #{e.message}"
+          return
+        end
+      end
+
+      def synchronize_set key, content
+        begin
+          etcd.set(key,:value => content, :recusive => true)
+        rescue Exception => e
+          verbose "synchronize_set: key: #{key}, failed to add key, error: #{e.message}"
+        end
+      end
+
+      def synchronize_key path
+        path.sub(/^#{options[:basedir]}/,"/#{synchronize_prefix}" )
+      end
+
+      def synchronize_prefix
+        @prefix ||= nil
+        unless @prefix
+          @prefix = options[:prefix]
+          # remove any slashs
+          @prefix.sub!(/^\//,"")
+          # add a trailing slash
+          @prefix.sub!(/$/,"/") unless @prefix.end_with? "/"
+        end
+        @prefix
+      end
+
+      def verbose message
+        puts "* #{message}" if options[:verbose]
+      end
+
+      def etcd
+        @etcd ||= nil
+        unless @etcd
+          verbose "Creating a connection to etcd: #{options[:host]}:#{options[:port]}"
+          @etcd = Etcd.client(host: options[:host], port: options[:port] )
+        end
+        @etcd
+      end
+
+      def options
+        @options ||= default_options
+        @options
+      end
+
+      def default_options
+        {
+          :host      => '127.0.0.1',
+          :port      => 4001,
+          :prefix    => "",
+          :overwrite => false
+        }
+      end
+    end
+  end
+end
+
+Etcd::Sync::CLI.new
+

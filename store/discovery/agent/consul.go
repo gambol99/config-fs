@@ -32,7 +32,7 @@ type ConsulServiceAgent struct {
 }
 
 func (r *ConsulServiceAgent) FindServices(filter string) ([]Service, error) {
-	Verbose("FindServices() filter: %s", filter)
+	glog.V(VERBOSE_LEVEL).Infof("FindServices() filter: %s", filter)
 	catalog := r.Client.Catalog()
 	services, _, err := catalog.Service(filter, "", &consulapi.QueryOptions{})
 	if err != nil {
@@ -47,12 +47,12 @@ func (r *ConsulServiceAgent) FindServices(filter string) ([]Service, error) {
 }
 
 func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel ServiceUpdateChannel) (chan bool, error) {
-	Verbose("WatchServices() watching for changes to service: %s, channel: %V", service, updateChannel)
+	glog.V(VERBOSE_LEVEL).Infof("WatchServices() watching for changes to service: %s, channel: %v", service, updateChannel)
 	shutdownChannel := make(chan bool)
 	go func() {
 		catalog := r.Client.Catalog()
 		killOff := false
-		waitIndex := uint64(0)
+		r.WaitIndex = uint64(0)
 		/* step wait for a shutdown signal */
 		go func() {
 			<-shutdownChannel
@@ -63,7 +63,7 @@ func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel Servi
 				glog.V(3).Infof("WatchServices() shutting down watch on service: %s", service)
 				break
 			}
-			if waitIndex == 0 {
+			if r.WaitIndex == 0 {
 				/* step: lets get the wait index */
 				_, meta, err := catalog.Service(service.Name, "", &consulapi.QueryOptions{})
 				if err != nil {
@@ -71,8 +71,7 @@ func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel Servi
 					time.Sleep(5 * time.Second)
 				} else {
 					/* update the wait index for this service */
-					waitIndex = meta.LastIndex
-					Verbose("WatchServices() service: %s, index %d", service, meta.LastIndex)
+					r.WaitIndex = meta.LastIndex
 				}
 			}
 			/* step: build the query - make sure we have a timeout */
@@ -82,22 +81,21 @@ func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel Servi
 			_, meta, err := catalog.Service(service.Name, "", queryOptions)
 			if err != nil {
 				glog.Errorf("Failed to wait for service to change, error: %s", err)
-				waitIndex = 0
+				r.WaitIndex = uint64(0)
 				time.Sleep(5 * time.Second)
 			} else {
 				if killOff {
 					continue
 				}
-
 				/* step: if the wait and last index are the same, we can continue */
 				if r.WaitIndex == meta.LastIndex {
-					Verbose("The WaitIndea and LastIndex are the same, skipping")
+					glog.V(VERBOSE_LEVEL).Infof("The WaitIndex and LastIndex are the same, skipping")
 					continue
 				}
 				/* step: update the index */
-				waitIndex = meta.LastIndex
+				r.WaitIndex = meta.LastIndex
 				/* step: send the update upstream */
-				Verbose("WatchServices() service: %s changes; sending upstream", service)
+				glog.V(VERBOSE_LEVEL).Infof("WatchServices() service: %s changes; sending upstream", *service )
 				updateChannel <- service
 			}
 		}
@@ -105,11 +103,11 @@ func (r *ConsulServiceAgent) WatchServices(service *Service, updateChannel Servi
 	return shutdownChannel, nil
 }
 
-func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) (service Service) {
+func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) (Service) {
+	var service Service
 	service.ID = svc.ServiceID
 	service.Name = svc.ServiceName
 	service.Address = svc.Address
 	service.Port = svc.ServicePort
-	service.Tags = svc.ServiceTags
-	return
+	return service
 }
