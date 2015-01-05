@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package agent
+package discovery
 
 import (
 	"net/url"
@@ -20,11 +20,11 @@ import (
 	"github.com/golang/glog"
 )
 
-func NewConsulServiceAgent(location string) (DiscoveryAgent, error) {
-	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", location)
+func NewConsulServiceAgent() (Discovery, error) {
+	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", *discovery_url)
 	/* step: parse the url */
-	if uri, err := url.Parse(location); err != nil {
-		glog.Errorf("Failed to parse the discovery url: %s, error: %s", location, err)
+	if uri, err := url.Parse(*discovery_url); err != nil {
+		glog.Errorf("Failed to parse the discovery url: %s, error: %s", *discovery_url, err)
 		return nil, err
 	} else {
 		config := consulapi.DefaultConfig()
@@ -35,7 +35,7 @@ func NewConsulServiceAgent(location string) (DiscoveryAgent, error) {
 			return nil, err
 		}
 		agent := new(ConsulServiceAgent)
-		agent.Client = client
+		agent.client = client
 		return agent, nil
 	}
 }
