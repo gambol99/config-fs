@@ -45,7 +45,7 @@ type Watcher struct {
 }
 
 /* the channel used to send events */
-type WatchServiceChannel chan fsnotify.Event
+type WatchServiceChannel chan *fsnotify.Event
 
 /* create an instance */
 func NewWatchService() (WatchService,error) {

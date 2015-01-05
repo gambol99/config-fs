@@ -119,7 +119,7 @@ func (r *DiscoveryService) WatchService(provider string, service string, updateC
 		definition := new(agent.Service)
 		definition.Name = service
 
-		glog.V(3).Infof("WatchService() provider: %s, service: %s, channel: %V", provider, service, updateChannel)
+		glog.V(3).Infof("WatchService() provider: %s, service: %s, channel: %v", provider, service, updateChannel)
 		/* step: lets create the watch on the service */
 		stop_watch_channel, err := provider.WatchServices(definition, updateChannel)
 		if err != nil {

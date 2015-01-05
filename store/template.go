@@ -46,7 +46,6 @@ type TemplatedConfig struct {
 	watchingKeys map[string]interface {}
 	/* the services we are watching */
 	watchingServices map[string][]agent.Service
-
 	/* the channel for listening to events */
 	storeUpdateChannel kv.NodeUpdateChannel
 	/* service update channel */
@@ -71,8 +70,8 @@ func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedReso
 		return nil, err
 	} else {
 		t.template = tpl
-		t.watchingKeys = make(map[string]interface {},5)
-		t.watchingServices = make(map[string][]agent.Service,5)
+		t.watchingKeys = make(map[string]interface {},0)
+		t.watchingServices = make(map[string][]agent.Service,0)
 		t.storeUpdateChannel = make(kv.NodeUpdateChannel,5)
 		t.serviceUpdateChannel = make(agent.ServiceUpdateChannel,5)
 	}
@@ -86,7 +85,7 @@ func (r TemplatedConfig) Close() {
 
 func (r *TemplatedConfig) Render() (string,error) {
 	var content bytes.Buffer
-	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the terplate")
+	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the template: %s", r.path )
 	if err := r.template.Execute(&content,nil); err != nil {
 		glog.Errorf("Failed to render the content of file: %s, error: %s", r.path, err)
 		return "", err
@@ -97,16 +96,16 @@ func (r *TemplatedConfig) Render() (string,error) {
 
 func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
 	r.stopChannel = make(chan bool, 1)
+	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the template: %s, channel: %v", r.path, channel)
 	go func() {
 		for {
 			select {
 			case event := <- r.storeUpdateChannel:
 				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, event )
-				channel <- r.path
+				r.HandleNodeEvent(event, channel)
 			case event := <- r.serviceUpdateChannel:
 				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, event )
-
-				channel <- r.path
+				r.HandleServiceEvent(event.Name, channel)
 			case <- r.stopChannel:
 				glog.Infof("Shutting down the template for: %s", r.path )
 				/* @@TODO we need to remove the keys from being watched and remove the servics */
@@ -115,7 +114,29 @@ func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
 	}()
 }
 
-/* ============ T E M P L A T E   M E T H O D S  ============== */
+/* ============ EVENT HANDLERS ================================ */
+
+func (r *TemplatedConfig) HandleNodeEvent(event kv.NodeChange, channel TemplateUpdateChannel) {
+	glog.Infof("The key: %s, in template: %s has change", event, r.path )
+
+	channel <- r.path
+}
+
+func (r *TemplatedConfig) HandleServiceEvent(service string, channel TemplateUpdateChannel) {
+	glog.Infof("The service: %s in template: %s has changed, pulling the list", service, r.path )
+	if endpoints, err := r.discovery.FindServices("consul", service); err != nil {
+		glog.Errorf("Failed to update the service: %s, in template: %s, error: %s", service, r.path, err )
+	} else {
+		glog.V(VERBOSE_LEVEL).Infof("Template: %s, endpoints: %s", r.path, endpoints)
+		/* step: update the endpoints for the services */
+		r.watchingServices[service] = endpoints
+		go func() {
+			channel <- r.path
+		}()
+	}
+}
+
+/* ============ TEMPLATE METHODS ============================== */
 
 func (r *TemplatedConfig) GetKeyValue(key string) string {
 	glog.V(VERBOSE_LEVEL).Infof("getv() key: %s", key )
@@ -151,7 +172,7 @@ func (r *TemplatedConfig) MarshallJSON(content string) interface {} {
 func (r *TemplatedConfig) FindService(service string) []agent.Service {
 	provider := "consul"
 
-	glog.V(VERBOSE_LEVEL).Infof("service() provider: %s, service: %s", provider, service )
+	glog.V(VERBOSE_LEVEL).Infof("FindService() provider: %s, service: %s", provider, service )
 	services := make([]agent.Service,0)
 	/* step: check the provider exists */
 	if found := r.discovery.Exists(provider); !found {
@@ -176,8 +197,10 @@ func (r *TemplatedConfig) FindService(service string) []agent.Service {
 				glog.Errorf("Failed to retrieve a list of services for service: %s, provider: %s, error: %s", service, provider, err )
 				return services
 			}
+			glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, template: %s, endpoints: %s", len(list), service, r.path, list )
 			/* step: update the map */
 			r.watchingServices[service] = list
+			return list
 		}
 	}
 

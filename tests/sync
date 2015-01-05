@@ -26,7 +26,7 @@ module Etcd
       private
       def parser
         @parser ||= OptionScrapper.new do |o|
-          o.on('-H HOST', '--host HOST', "the etcd host you are syncrhonizing to (defaults to #{options[:etcd]})" ) { |x| options[:etcd] = x }
+          o.on('-H HOST', '--host HOST', "the etcd host you are syncrhonizing to (defaults to #{options[:host]})" ) { |x| options[:host] = x }
           o.on('-p PORT', '--port PORT', "the port etcd is running on (defaults to #{options[:port]})" ) { |x| options[:port] = x.to_i }
           o.on('-b DIRECTORY', '--base DIRECTORY', "the directory you wish to syncrhonize to etcd" ) { |x| options[:basedir] = x }
           o.on('-P PREFIX', '--prefix PREFIX', "add the prefix to etcd keys, otherwise everthing is assumed as relative root") { |x| options[:prefix] = x }
@@ -97,10 +97,11 @@ module Etcd
       end
 
       def synchronize_key path
-        path.sub(/^#{options[:basedir]}/,"/#{synchronize_prefix}")
+        path.sub(/^#{options[:basedir]}/,"/#{synchronize_prefix}" )
       end
 
       def synchronize_prefix
+        @prefix ||= nil
         unless @prefix
           @prefix = options[:prefix]
           # remove any slashs
@@ -118,8 +119,8 @@ module Etcd
       def etcd
         @etcd ||= nil
         unless @etcd
-          verbose "Creating a connection to etcd: #{options[:etcd]}:#{options[:port]}"
-          @etcd = Etcd.client(host: options[:etcd], port: options[:port] )
+          verbose "Creating a connection to etcd: #{options[:host]}:#{options[:port]}"
+          @etcd = Etcd.client(host: options[:host], port: options[:port] )
         end
         @etcd
       end
@@ -131,7 +132,7 @@ module Etcd
 
       def default_options
         {
-          :etcd      => '127.0.0.1',
+          :host      => '127.0.0.1',
           :port      => 4001,
           :prefix    => "",
           :overwrite => false
