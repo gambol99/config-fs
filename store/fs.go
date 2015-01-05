@@ -71,11 +71,9 @@ type FileStore interface {
 	Touch(path string) error
 	/* parent directory */
 	Dirname(path string) string
-
 }
 
 type StoreFS struct {
-
 }
 
 func NewStoreFS() FileStore {
@@ -321,4 +319,3 @@ func (r *StoreFS) ListDirectories(path string) ([]string, error) {
 	}
 	return paths, nil
 }
-

@@ -101,7 +101,7 @@ func (r *ConsulServiceAgent) WatchService(service string, updateChannel ServiceU
 				/* step: update the index */
 				r.waitIndex = meta.LastIndex
 				/* step: send the update upstream */
-				glog.V(VERBOSE_LEVEL).Infof("WatchServices() service: %s changes; sending upstream", service )
+				glog.V(VERBOSE_LEVEL).Infof("WatchServices() service: %s changes; sending upstream", service)
 				updateChannel <- service
 			}
 		}
@@ -109,7 +109,7 @@ func (r *ConsulServiceAgent) WatchService(service string, updateChannel ServiceU
 	return shutdownChannel, nil
 }
 
-func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) (Endpoint) {
+func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) Endpoint {
 	var endpoint Endpoint
 	endpoint.ID = svc.ServiceID
 	endpoint.Name = svc.ServiceName

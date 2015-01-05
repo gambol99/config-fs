@@ -14,12 +14,12 @@ limitations under the License.
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"text/template"
-	"bytes"
 
-	"github.com/gambol99/config-fs/store/kv"
 	"github.com/gambol99/config-fs/store/discovery"
+	"github.com/gambol99/config-fs/store/kv"
 	"github.com/golang/glog"
 )
 
@@ -27,7 +27,7 @@ type TemplatedResource interface {
 	/* watch the template for change and send notification via channel */
 	WatchTemplate(channel TemplateUpdateChannel)
 	/* render the content of the template */
-	Render() (string,error)
+	Render() (string, error)
 	/* shutdown and release the assets */
 	Close()
 }
@@ -42,7 +42,7 @@ type TemplatedConfig struct {
 	/* the k/v store */
 	store kv.KVStore
 	/* the keys we are watching */
-	watchingKeys map[string]interface {}
+	watchingKeys map[string]interface{}
 	/* the services we are watching */
 	watchingServices map[string][]discovery.Endpoint
 	/* the channel for listening to events */
@@ -53,52 +53,52 @@ type TemplatedConfig struct {
 	stopChannel chan bool
 }
 
-func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedResource,error) {
-	glog.Infof("Creating new template, path: %s", path )
+func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedResource, error) {
+	glog.Infof("Creating new template, path: %s", path)
 	t := new(TemplatedConfig)
 	t.path = path
 	t.store = store
 
 	/* step: create a discovery agent */
 	if agent, err := discovery.NewConsulServiceAgent(); err != nil {
-		glog.Errorf("Failed to create the discovery agent, error: %s", err )
+		glog.Errorf("Failed to create the discovery agent, error: %s", err)
 		return nil, err
 	} else {
 		t.discovery = agent
 	}
 
 	/* step: create the function map for this template */
-	functionMap := template.FuncMap {
-		"service":  t.FindService,
-		"getv": t.GetKeyValue,
-		"json": t.MarshallJSON }
+	functionMap := template.FuncMap{
+		"service": t.FindService,
+		"getv":    t.GetKeyValue,
+		"json":    t.MarshallJSON}
 	if tpl, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
-		glog.Errorf("Failed to create the template: %s, error: %s", path, err )
+		glog.Errorf("Failed to create the template: %s, error: %s", path, err)
 		return nil, err
 	} else {
 		t.template = tpl
-		t.watchingKeys = make(map[string]interface {},0)
-		t.watchingServices = make(map[string][]discovery.Endpoint,0)
-		t.storeUpdateChannel = make(kv.NodeUpdateChannel,5)
-		t.serviceUpdateChannel = make(discovery.ServiceUpdateChannel,5)
+		t.watchingKeys = make(map[string]interface{}, 0)
+		t.watchingServices = make(map[string][]discovery.Endpoint, 0)
+		t.storeUpdateChannel = make(kv.NodeUpdateChannel, 5)
+		t.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
 	}
 	return t, nil
 }
 
 func (r TemplatedConfig) Close() {
-	glog.Infof("Closing the resources for template: %s", r.path )
+	glog.Infof("Closing the resources for template: %s", r.path)
 	r.stopChannel <- true
 }
 
-func (r *TemplatedConfig) Render() (string,error) {
+func (r *TemplatedConfig) Render() (string, error) {
 	var content bytes.Buffer
-	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the template: %s", r.path )
-	if err := r.template.Execute(&content,nil); err != nil {
+	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the template: %s", r.path)
+	if err := r.template.Execute(&content, nil); err != nil {
 		glog.Errorf("Failed to render the content of file: %s, error: %s", r.path, err)
 		return "", err
 	}
 	/* step: return the rendered content minus the prefix */
-	return  content.String()[len(TEMPLATED_PREFIX):], nil
+	return content.String()[len(TEMPLATED_PREFIX):], nil
 }
 
 func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
@@ -107,14 +107,14 @@ func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
 	go func() {
 		for {
 			select {
-			case event := <- r.storeUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, event )
+			case event := <-r.storeUpdateChannel:
+				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, event)
 				r.HandleNodeEvent(event, channel)
-			case service := <- r.serviceUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, service )
+			case service := <-r.serviceUpdateChannel:
+				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, service)
 				r.HandleServiceEvent(service, channel)
-			case <- r.stopChannel:
-				glog.Infof("Shutting down the template for: %s", r.path )
+			case <-r.stopChannel:
+				glog.Infof("Shutting down the template for: %s", r.path)
 				/* @@TODO we need to remove the keys from being watched and remove the servics */
 			}
 		}
@@ -124,15 +124,15 @@ func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
 /* ============ EVENT HANDLERS ================================ */
 
 func (r *TemplatedConfig) HandleNodeEvent(event kv.NodeChange, channel TemplateUpdateChannel) {
-	glog.Infof("The key: %s, in template: %s has change", event, r.path )
+	glog.Infof("The key: %s, in template: %s has change", event, r.path)
 
 	channel <- r.path
 }
 
 func (r *TemplatedConfig) HandleServiceEvent(service string, channel TemplateUpdateChannel) {
-	glog.Infof("The service: %s in template: %s has changed, pulling the list", service, r.path )
+	glog.Infof("The service: %s in template: %s has changed, pulling the list", service, r.path)
 	if endpoints, err := r.discovery.ListEndpoints(service); err != nil {
-		glog.Errorf("Failed to update the service: %s, in template: %s, error: %s", service, r.path, err )
+		glog.Errorf("Failed to update the service: %s, in template: %s, error: %s", service, r.path, err)
 	} else {
 		glog.V(VERBOSE_LEVEL).Infof("Template: %s, endpoints: %s", r.path, endpoints)
 		/* step: update the endpoints for the services */
@@ -146,16 +146,16 @@ func (r *TemplatedConfig) HandleServiceEvent(service string, channel TemplateUpd
 /* ============ TEMPLATE METHODS ============================== */
 
 func (r *TemplatedConfig) GetKeyValue(key string) string {
-	glog.V(VERBOSE_LEVEL).Infof("getv() key: %s", key )
+	glog.V(VERBOSE_LEVEL).Infof("getv() key: %s", key)
 	/* step: check if we have the value in the map */
 	if content, found := r.watchingKeys[key]; found {
-		glog.V(VERBOSE_LEVEL).Infof("get() key: %s found in the cache", key )
+		glog.V(VERBOSE_LEVEL).Infof("get() key: %s found in the cache", key)
 		return content.(string)
 	} else {
 		/* step: we need to grab the key from the store and store */
 		content, err := r.store.Get(key)
 		if err != nil {
-			glog.Errorf("Failed to get the key: %s, error: %s", key, err )
+			glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 			return ""
 		}
 		/* step: check if the key is presently being watched */
@@ -166,10 +166,10 @@ func (r *TemplatedConfig) GetKeyValue(key string) string {
 	return ""
 }
 
-func (r *TemplatedConfig) MarshallJSON(content string) interface {} {
-	var json_data map[string]interface {}
-	if err := json.Unmarshal([]byte(content),&json_data); err != nil {
-		glog.Errorf("Failed to unmarshall the json data, value: %s, error: %s", content, err )
+func (r *TemplatedConfig) MarshallJSON(content string) interface{} {
+	var json_data map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &json_data); err != nil {
+		glog.Errorf("Failed to unmarshall the json data, value: %s, error: %s", content, err)
 		return ""
 	} else {
 		return json_data
@@ -177,16 +177,16 @@ func (r *TemplatedConfig) MarshallJSON(content string) interface {} {
 }
 
 func (r *TemplatedConfig) FindService(service string) []discovery.Endpoint {
-	glog.V(VERBOSE_LEVEL).Infof("FindService() provider: %s, service: %s", service )
-	services := make([]discovery.Endpoint,0)
+	glog.V(VERBOSE_LEVEL).Infof("FindService() provider: %s, service: %s", service)
+	services := make([]discovery.Endpoint, 0)
 
 	if list, found := r.watchingServices[service]; found {
-		glog.V(VERBOSE_LEVEL).Infof("FindService() found service: %s in cache", service )
+		glog.V(VERBOSE_LEVEL).Infof("FindService() found service: %s in cache", service)
 		return list
 	} else {
 		/* must be the first time we have run - we need to grab the services and place a watch on the service */
 		if stopChannel, err := r.discovery.WatchService(service, r.serviceUpdateChannel); err != nil {
-			glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err )
+			glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
 			return services
 		} else {
 			var _ = stopChannel
@@ -194,10 +194,10 @@ func (r *TemplatedConfig) FindService(service string) []discovery.Endpoint {
 		/* step: we get a list of the services */
 		list, err := r.discovery.ListEndpoints(service)
 		if err != nil {
-			glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err )
+			glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err)
 			return services
 		}
-		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, template: %s, endpoints: %s", len(list), service, r.path, list )
+		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, template: %s, endpoints: %s", len(list), service, r.path, list)
 		/* step: update the map */
 		r.watchingServices[service] = list
 		return list

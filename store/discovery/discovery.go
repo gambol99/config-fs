@@ -21,7 +21,7 @@ import (
 
 var (
 	InvalidProviderErr = errors.New("Invalid provider name, does not exist")
-	discovery_url *string
+	discovery_url      *string
 )
 
 const VERBOSE_LEVEL = 6
@@ -43,7 +43,7 @@ type Endpoint struct {
 }
 
 func (s Endpoint) String() string {
-	return fmt.Sprintf("id: %s, name: %s, address: %s:%d", s.ID, s.Name, s.Address, s.Port )
+	return fmt.Sprintf("id: %s, name: %s, address: %s:%d", s.ID, s.Name, s.Address, s.Port)
 }
 
 /* The Discovery service is a binding between X service discovery providers (i.e. consul, skydns, discoverd etc) */
