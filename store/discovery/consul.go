@@ -15,6 +15,7 @@ package discovery
 
 import (
 	"time"
+	"net/url"
 
 	consulapi "github.com/armon/consul-api"
 	"github.com/golang/glog"
@@ -29,6 +30,26 @@ type ConsulServiceAgent struct {
 	waitIndex uint64
 	/* the shutdown signal */
 	shutdownChannel chan bool
+}
+
+func NewConsulServiceAgent() (Discovery, error) {
+	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", *discovery_url)
+	/* step: parse the url */
+	if uri, err := url.Parse(*discovery_url); err != nil {
+		glog.Errorf("Failed to parse the discovery url: %s, error: %s", *discovery_url, err)
+		return nil, err
+	} else {
+		config := consulapi.DefaultConfig()
+		config.Address = uri.Host
+		client, err := consulapi.NewClient(config)
+		if err != nil {
+			glog.Errorf("Failed to create the Consul Client, error: %s", err)
+			return nil, err
+		}
+		agent := new(ConsulServiceAgent)
+		agent.client = client
+		return agent, nil
+	}
 }
 
 func (r *ConsulServiceAgent) Close() error {

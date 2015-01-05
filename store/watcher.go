@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/gambol99/config-fs/store/fs"
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
 )
@@ -104,7 +105,7 @@ func (r *Watcher) AddDirectoryWatch(path string) error {
 	} else {
 		if directory == false {
 			glog.Errorf("Failed to add directory watch on: %s, directory does not exist", path)
-			return DirectoryDoesNotExistErr
+			return fs.DirectoryDoesNotExistErr
 		}
 	}
 

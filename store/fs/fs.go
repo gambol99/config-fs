@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package store
+package fs
 
 import (
 	"crypto/md5"
@@ -31,10 +31,6 @@ const (
 	DEFAULT_DIRECTORY_PERMS = 0755
 	DEFAULT_FILE_PERMS      = 0644
 )
-
-func Verbose(message string, args ...interface{}) {
-	glog.V(VERBOSE_LEVEL).Infof(message, args)
-}
 
 var (
 	DoesNotExistErr          = errors.New("The request entruy does not exists")

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package store
+package dynamic
 
 import (
 	"bytes"
@@ -23,16 +23,16 @@ import (
 	"github.com/golang/glog"
 )
 
-type TemplatedResource interface {
+type DynamicResource interface {
 	/* watch the template for change and send notification via channel */
-	WatchTemplate(channel TemplateUpdateChannel)
+	Watch(channel DynamicUpdateChannel)
 	/* render the content of the template */
 	Render() (string, error)
 	/* shutdown and release the assets */
 	Close()
 }
 
-type TemplatedConfig struct {
+type DynamicConfig struct {
 	/* the path of the file */
 	path string
 	/* the actual template */
@@ -53,9 +53,9 @@ type TemplatedConfig struct {
 	stopChannel chan bool
 }
 
-func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedResource, error) {
+func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource, error) {
 	glog.Infof("Creating new template, path: %s", path)
-	t := new(TemplatedConfig)
+	t := new(DynamicConfig)
 	t.path = path
 	t.store = store
 
@@ -71,7 +71,7 @@ func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedReso
 	functionMap := template.FuncMap{
 		"service": t.FindService,
 		"getv":    t.GetKeyValue,
-		"json":    t.MarshallJSON}
+		"json":    t.UnmarshallJSON}
 	if tpl, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
 		glog.Errorf("Failed to create the template: %s, error: %s", path, err)
 		return nil, err
@@ -85,12 +85,12 @@ func NewTemplatedResource(path, content string, store kv.KVStore) (TemplatedReso
 	return t, nil
 }
 
-func (r TemplatedConfig) Close() {
+func (r DynamicConfig) Close() {
 	glog.Infof("Closing the resources for template: %s", r.path)
 	r.stopChannel <- true
 }
 
-func (r *TemplatedConfig) Render() (string, error) {
+func (r *DynamicConfig) Render() (string, error) {
 	var content bytes.Buffer
 	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the template: %s", r.path)
 	if err := r.template.Execute(&content, nil); err != nil {
@@ -98,10 +98,10 @@ func (r *TemplatedConfig) Render() (string, error) {
 		return "", err
 	}
 	/* step: return the rendered content minus the prefix */
-	return content.String()[len(TEMPLATED_PREFIX):], nil
+	return content.String()[len(DYNAMIC_PREFIX):], nil
 }
 
-func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
+func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 	r.stopChannel = make(chan bool, 1)
 	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the template: %s, channel: %v", r.path, channel)
 	go func() {
@@ -123,13 +123,13 @@ func (r *TemplatedConfig) WatchTemplate(channel TemplateUpdateChannel) {
 
 /* ============ EVENT HANDLERS ================================ */
 
-func (r *TemplatedConfig) HandleNodeEvent(event kv.NodeChange, channel TemplateUpdateChannel) {
+func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpdateChannel) {
 	glog.Infof("The key: %s, in template: %s has change", event, r.path)
 
 	channel <- r.path
 }
 
-func (r *TemplatedConfig) HandleServiceEvent(service string, channel TemplateUpdateChannel) {
+func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdateChannel) {
 	glog.Infof("The service: %s in template: %s has changed, pulling the list", service, r.path)
 	if endpoints, err := r.discovery.ListEndpoints(service); err != nil {
 		glog.Errorf("Failed to update the service: %s, in template: %s, error: %s", service, r.path, err)
@@ -145,7 +145,7 @@ func (r *TemplatedConfig) HandleServiceEvent(service string, channel TemplateUpd
 
 /* ============ TEMPLATE METHODS ============================== */
 
-func (r *TemplatedConfig) GetKeyValue(key string) string {
+func (r *DynamicConfig) GetKeyValue(key string) string {
 	glog.V(VERBOSE_LEVEL).Infof("getv() key: %s", key)
 	/* step: check if we have the value in the map */
 	if content, found := r.watchingKeys[key]; found {
@@ -166,7 +166,7 @@ func (r *TemplatedConfig) GetKeyValue(key string) string {
 	return ""
 }
 
-func (r *TemplatedConfig) MarshallJSON(content string) interface{} {
+func (r *DynamicConfig) UnmarshallJSON(content string) interface{} {
 	var json_data map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &json_data); err != nil {
 		glog.Errorf("Failed to unmarshall the json data, value: %s, error: %s", content, err)
@@ -176,7 +176,7 @@ func (r *TemplatedConfig) MarshallJSON(content string) interface{} {
 	}
 }
 
-func (r *TemplatedConfig) FindService(service string) []discovery.Endpoint {
+func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
 	glog.V(VERBOSE_LEVEL).Infof("FindService() provider: %s, service: %s", service)
 	services := make([]discovery.Endpoint, 0)
 
