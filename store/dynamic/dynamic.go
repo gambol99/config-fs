@@ -38,7 +38,7 @@ type DynamicStore interface {
 type DynamicStoreImpl struct {
 	/* a lock on the resources */
 	sync.RWMutex
-	/* a map of the templated resources */
+	/* a map of the dynamic resources */
 	resources map[string]DynamicResource
 	/* the key value store */
 	backend kv.KVStore
@@ -70,38 +70,38 @@ func (r *DynamicStoreImpl) IsDynamic(path string) (DynamicResource, bool) {
 /* check if the content of a resource is a dynamic content */
 func (r *DynamicStoreImpl) IsDynamicContent(path, content string) bool {
 	if strings.HasPrefix(content, r.prefix) {
-		glog.V(VERBOSE_LEVEL).Infof("Found templated content in file: %s", path)
+		glog.V(VERBOSE_LEVEL).Infof("Found dynamic content in file: %s", path)
 		return true
 	}
 	return false
 }
 
 func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateChannel) (string, error) {
-	glog.V(VERBOSE_LEVEL).Infof("Creating a new template, path: %s", path )
+	glog.V(VERBOSE_LEVEL).Infof("Creating a new dynamic config, path: %s", path )
 	if _, found := r.IsDynamic(path); found {
-		glog.Errorf("The template: %s already exist, we can skip creation", path)
+		glog.Errorf("The dynamic config: %s already exist, we can skip creation", path)
 		return "", nil
 	}
-	/* step: we need to create a template for this
-	- we read in the template content
+	/* step: we need to create a dynamic config for this
+	- we read in the content
 	- we generate the content
 	- we create watches on the keys / services
-	- and we update the store with a notification when the template changes
+	- and we update the store with a notification
 	*/
 	if resource, err := NewDynamicResource(path, content, r.backend ); err != nil {
 		glog.Errorf("Failed to create the templated resournce: %s, error: %s", path, err)
 		return "", err
 	} else {
-		/* step: we generate the templated content ready to return */
+		/* step: we generate the dynamic content ready to return */
 		if content, err := resource.Render(); err != nil {
-			glog.Errorf("Failed to render the template: %s, error: %s", path, err)
+			glog.Errorf("Failed to render the dynamic config: %s, error: %s", path, err)
 			return "", err
 		} else {
-			/* step: we need to listen out to events from the template */
+			/* step: we need to listen out to events from the dynamic config */
 			resource.Watch(channel)
 			/* step: we need to add the map */
 			r.Add(path, resource)
-			/* return the content of the template */
+			/* return the content of the dynamic config */
 			return content, nil
 		}
 	}

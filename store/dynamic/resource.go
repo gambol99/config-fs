@@ -24,7 +24,7 @@ import (
 )
 
 type DynamicResource interface {
-	/* watch the template for change and send notification via channel */
+	/* watch the dynamic config for changes and send notification via channel */
 	Watch(channel DynamicUpdateChannel)
 	/* render the content of the template */
 	Render() (string, error)
@@ -54,7 +54,7 @@ type DynamicConfig struct {
 }
 
 func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource, error) {
-	glog.Infof("Creating new template, path: %s", path)
+	glog.Infof("Creating new dynamic config, path: %s", path)
 	t := new(DynamicConfig)
 	t.path = path
 	t.store = store
@@ -73,7 +73,7 @@ func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource
 		"getv":    t.GetKeyValue,
 		"json":    t.UnmarshallJSON}
 	if tpl, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
-		glog.Errorf("Failed to create the template: %s, error: %s", path, err)
+		glog.Errorf("Failed to create the dynamic config: %s, error: %s", path, err)
 		return nil, err
 	} else {
 		t.template = tpl
@@ -86,13 +86,13 @@ func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource
 }
 
 func (r DynamicConfig) Close() {
-	glog.Infof("Closing the resources for template: %s", r.path)
+	glog.Infof("Closing the resources for dynamic config: %s", r.path)
 	r.stopChannel <- true
 }
 
 func (r *DynamicConfig) Render() (string, error) {
 	var content bytes.Buffer
-	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the template: %s", r.path)
+	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the dynamic config: %s", r.path)
 	if err := r.template.Execute(&content, nil); err != nil {
 		glog.Errorf("Failed to render the content of file: %s, error: %s", r.path, err)
 		return "", err
@@ -103,18 +103,18 @@ func (r *DynamicConfig) Render() (string, error) {
 
 func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 	r.stopChannel = make(chan bool, 1)
-	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the template: %s, channel: %v", r.path, channel)
+	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the dynamic config: %s, channel: %v", r.path, channel)
 	go func() {
 		for {
 			select {
 			case event := <-r.storeUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, event)
+				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, event)
 				r.HandleNodeEvent(event, channel)
 			case service := <-r.serviceUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Template: %s, event: %s", r.path, service)
+				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, service)
 				r.HandleServiceEvent(service, channel)
 			case <-r.stopChannel:
-				glog.Infof("Shutting down the template for: %s", r.path)
+				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
 				/* @@TODO we need to remove the keys from being watched and remove the servics */
 			}
 		}
@@ -124,17 +124,17 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 /* ============ EVENT HANDLERS ================================ */
 
 func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpdateChannel) {
-	glog.Infof("The key: %s, in template: %s has change", event, r.path)
+	glog.Infof("The key: %s, in dynamic config: %s has change", event, r.path)
 
 	channel <- r.path
 }
 
 func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdateChannel) {
-	glog.Infof("The service: %s in template: %s has changed, pulling the list", service, r.path)
+	glog.Infof("The service: %s in dynamic config: %s has changed, pulling the list", service, r.path)
 	if endpoints, err := r.discovery.ListEndpoints(service); err != nil {
-		glog.Errorf("Failed to update the service: %s, in template: %s, error: %s", service, r.path, err)
+		glog.Errorf("Failed to update the service: %s, in dynamic config: %s, error: %s", service, r.path, err)
 	} else {
-		glog.V(VERBOSE_LEVEL).Infof("Template: %s, endpoints: %s", r.path, endpoints)
+		glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, endpoints: %s", r.path, endpoints)
 		/* step: update the endpoints for the services */
 		r.watchingServices[service] = endpoints
 		go func() {
@@ -146,22 +146,20 @@ func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdate
 /* ============ TEMPLATE METHODS ============================== */
 
 func (r *DynamicConfig) GetKeyValue(key string) string {
-	glog.V(VERBOSE_LEVEL).Infof("getv() key: %s", key)
 	/* step: check if we have the value in the map */
 	if content, found := r.watchingKeys[key]; found {
-		glog.V(VERBOSE_LEVEL).Infof("get() key: %s found in the cache", key)
 		return content.(string)
 	} else {
 		/* step: we need to grab the key from the store and store */
-		content, err := r.store.Get(key)
-		if err != nil {
+		if content, err := r.store.Get(key); err != nil {
 			glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 			return ""
+		} else {
+			/* step: check if the key is presently being watched */
+			r.watchingKeys[key] = content.Value
+			/* return the content */
+			return content.Value
 		}
-		/* step: check if the key is presently being watched */
-		r.watchingKeys[key] = content.Value
-		/* return the content */
-		return content.Value
 	}
 	return ""
 }
@@ -197,7 +195,7 @@ func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
 			glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err)
 			return services
 		}
-		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, template: %s, endpoints: %s", len(list), service, r.path, list)
+		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, dynamic config: %s, endpoints: %s", len(list), service, r.path, list)
 		/* step: update the map */
 		r.watchingServices[service] = list
 		return list
