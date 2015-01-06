@@ -24,6 +24,7 @@ import (
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
+	"strings"
 )
 
 const (
@@ -279,8 +280,14 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 		glog.Errorf("Failed to remove the directory: %s, error: %s", full_path, err)
 		return err
 	}
-
-	/* @TODO step: we need to remove any templated resources which were in the directory */
+	/* We need to find any templates that we're in the directory and delete them, freeing up the
+	resources */
+	for resource_path, resource := range r.dynamic.List() {
+		if strings.HasPrefix(resource_path, path ) {
+			glog.V(3).Infof("Deleting the dynamic config: %s, config was inside deleted directory: %s", resource_path, path )
+			r.dynamic.Delete( resource_path )
+		}
+	}
 
 	/* step: delete the directory and all the children */
 	if err := r.fs.Rmdir(full_path); err != nil {
