@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gambol99/config-fs/store/fs"
 	"github.com/gambol99/config-fs/store/dynamic"
+	"github.com/gambol99/config-fs/store/fs"
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
@@ -38,9 +38,9 @@ const (
 
 /* --- command line options ---- */
 var (
-	mount_point *string
+	mount_point                                *string
 	delete_on_exit, read_only, pre_synchronize *bool
-	refresh_interval *int
+	refresh_interval                           *int
 )
 
 func init() {
@@ -48,7 +48,7 @@ func init() {
 	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
 	read_only = flag.Bool("readonly", DEFAULT_READ_ONLY, "wheather or not the config store of read-only")
-	pre_synchronize = flag.Bool("sync",  DEFAULT_PRE_SYNC, "wheather or not to perform a initial config sync against the backend")
+	pre_synchronize = flag.Bool("sync", DEFAULT_PRE_SYNC, "wheather or not to perform a initial config sync against the backend")
 }
 
 /* The interface to the config-fs */
@@ -87,7 +87,7 @@ func NewConfigurationStore() (Store, error) {
 	glog.Infof("Creating a new configuration store, mountpoint: '%s'")
 	/* step: we create the kv store */
 	if kvstore, err := kv.NewKVStore(); err != nil {
-		glog.Errorf("Failed to create the K/V Store, error: %s", err )
+		glog.Errorf("Failed to create the K/V Store, error: %s", err)
 		return nil, err
 	} else {
 		/* step; create the configuration store */
@@ -99,7 +99,7 @@ func NewConfigurationStore() (Store, error) {
 		service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
 		service.dynamicEventChannel = make(dynamic.DynamicUpdateChannel, 10)
 		service.filesystemEventChannel = make(WatchServiceChannel, 10)
-		service.timerEventChannel =  time.NewTicker(time.Duration(*refresh_interval) * time.Second)
+		service.timerEventChannel = time.NewTicker(time.Duration(*refresh_interval) * time.Second)
 		return service, nil
 	}
 }
@@ -123,7 +123,7 @@ func (r *ConfigurationStore) Synchronize() error {
 
 	/* step: perform a one-time build of the configuration store */
 	if *pre_synchronize {
-		glog.Infof("Starting the sychronization between mount: %s and store: %s", *mount_point, r.kv.URL() )
+		glog.Infof("Starting the sychronization between mount: %s and store: %s", *mount_point, r.kv.URL())
 		if err := r.BuildFileSystem(); err != nil {
 			glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 			return err

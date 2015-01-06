@@ -14,9 +14,9 @@ limitations under the License.
 package discovery
 
 import (
-	"time"
 	"net/url"
 	"sync"
+	"time"
 
 	consulapi "github.com/armon/consul-api"
 	"github.com/golang/glog"
@@ -52,7 +52,7 @@ func NewConsulServiceAgent(channel ServiceUpdateChannel) (Discovery, error) {
 		}
 		agent := new(ConsulServiceAgent)
 		agent.updateChannel = channel
-		agent.watchedServices = make(map[string]chan bool,0)
+		agent.watchedServices = make(map[string]chan bool, 0)
 		agent.client = client
 		return agent, nil
 	}
@@ -61,7 +61,7 @@ func NewConsulServiceAgent(channel ServiceUpdateChannel) (Discovery, error) {
 func (r *ConsulServiceAgent) Close() error {
 	/* step: we iterate the watches and send a shutdown signal to end the goroutine */
 	for service, channel := range r.watchedServices {
-		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service )
+		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service)
 		channel <- true
 	}
 	return nil
@@ -88,14 +88,14 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 
 	/* step: check if the resource is already being monitored */
 	if _, found := r.watchedServices[service]; found {
-		glog.V(VERBOSE_LEVEL).Infof("The service %s is already being watched by this agent, skipping", service )
+		glog.V(VERBOSE_LEVEL).Infof("The service %s is already being watched by this agent, skipping", service)
 		return nil
 	}
 
 	glog.V(VERBOSE_LEVEL).Infof("WatchService() adding a watch for changes to service: %s", service)
 
 	/* step: we create a stop channel which is used by the goroutine below */
-	shutdownChannel := make(chan bool,1)
+	shutdownChannel := make(chan bool, 1)
 	r.watchedServices[service] = shutdownChannel
 
 	go func() {

@@ -14,8 +14,8 @@ limitations under the License.
 package kv
 
 import (
-	"flag"
 	"errors"
+	"flag"
 	"net/url"
 
 	"github.com/golang/glog"
@@ -27,15 +27,14 @@ const (
 )
 
 var (
-	kv_store_url *string
-	InvalidUrlErr = errors.New("Invalid URI error, please check backend url")
+	kv_store_url        *string
+	InvalidUrlErr       = errors.New("Invalid URI error, please check backend url")
 	InvalidDirectoryErr = errors.New("Invalid directory specified")
 )
 
 func init() {
 	kv_store_url = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
 }
-
 
 type KVStore interface {
 	/* get the url for the kv store */

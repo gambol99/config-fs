@@ -16,8 +16,8 @@ package dynamic
 import (
 	"bytes"
 	"encoding/json"
-	"text/template"
 	"sync"
+	"text/template"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -47,7 +47,7 @@ type DynamicConfig struct {
 	content string
 	/* a map of keys being watched */
 	stopKeyChannels map[string]chan bool
-    /* the channel for listening to events */
+	/* the channel for listening to events */
 	storeUpdateChannel kv.NodeUpdateChannel
 	/* service update channel */
 	serviceUpdateChannel discovery.ServiceUpdateChannel
@@ -61,7 +61,7 @@ func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource
 	config.path = path
 	config.store = store
 	config.stopChannel = make(chan bool, 0)
-	config.stopKeyChannels = make(map[string]chan bool,0)
+	config.stopKeyChannels = make(map[string]chan bool, 0)
 	config.storeUpdateChannel = make(kv.NodeUpdateChannel, 5)
 	config.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
 
@@ -92,13 +92,13 @@ func (r DynamicConfig) Close() {
 
 }
 
-func (r *DynamicConfig) Content(forceRefresh bool) (string,error) {
+func (r *DynamicConfig) Content(forceRefresh bool) (string, error) {
 	/* step: get the content from the cache if there and refresh is false */
 	if r.content != "" && forceRefresh == false {
 		return r.content, nil
 	}
 	if err := r.Generate(); err != nil {
-		glog.Errorf("Failed to generate the dynamic content for config: %s, error: %s", r.path, err )
+		glog.Errorf("Failed to generate the dynamic content for config: %s, error: %s", r.path, err)
 		return "", err
 	} else {
 		return r.content, nil
@@ -106,13 +106,13 @@ func (r *DynamicConfig) Content(forceRefresh bool) (string,error) {
 }
 
 func (r *DynamicConfig) Generate() error {
- 	r.Lock()
+	r.Lock()
 	defer r.Unlock()
 	if content, err := r.Render(); err != nil {
-		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err)
 		return err
 	} else {
-		glog.V(VERBOSE_LEVEL).Infof("Updating the content for config: %s", r.path )
+		glog.V(VERBOSE_LEVEL).Infof("Updating the content for config: %s", r.path)
 		/* step: update the cache copy */
 		r.content = content
 	}
@@ -147,7 +147,7 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
 				/* step: close all the watches on the key */
 				for path, channel := range r.stopKeyChannels {
-					glog.V(VERBOSE_LEVEL).Infof("Stopping the k/v watch on key: %s", path )
+					glog.V(VERBOSE_LEVEL).Infof("Stopping the k/v watch on key: %s", path)
 					channel <- true
 				}
 			}
@@ -158,7 +158,7 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpdateChannel) {
 	glog.Infof("The key: %s, in dynamic config: %s has changed", event, r.path)
 	if err := r.Generate(); err != nil {
-		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err)
 	} else {
 		channel <- r.path
 	}
@@ -168,7 +168,7 @@ func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpda
 func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdateChannel) {
 	glog.Infof("The service: %s in dynamic config: %s has changed, pulling the list", service, r.path)
 	if content, err := r.Render(); err != nil {
-		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err)
 	} else {
 		r.content = content
 		go func() {
@@ -180,7 +180,7 @@ func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdate
 func (r *DynamicConfig) GetValue(key string) string {
 	/* step: we add a watch on the key */
 	if stopChannel, err := r.store.Watch(key, r.storeUpdateChannel); err != nil {
-		glog.Errorf("Failed to add a watch for key: %s, error: %s", key, err )
+		glog.Errorf("Failed to add a watch for key: %s, error: %s", key, err)
 		return ""
 	} else {
 		r.stopKeyChannels[key] = stopChannel

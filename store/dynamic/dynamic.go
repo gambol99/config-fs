@@ -14,16 +14,16 @@ limitations under the License.
 package dynamic
 
 import (
-	"sync"
 	"strings"
+	"sync"
 
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/golang/glog"
 )
 
 const (
-	DYNAMIC_PREFIX  = "$TEMPLATE$"
-	VERBOSE_LEVEL     = 5
+	DYNAMIC_PREFIX = "$TEMPLATE$"
+	VERBOSE_LEVEL  = 5
 )
 
 type DynamicUpdateChannel chan string
@@ -52,9 +52,9 @@ type DynamicStoreImpl struct {
 	prefix string
 }
 
-func NewDynamicStore(prefix string, backend kv.KVStore) (DynamicStore) {
+func NewDynamicStore(prefix string, backend kv.KVStore) DynamicStore {
 	service := new(DynamicStoreImpl)
-	service.resources = make(map[string]DynamicResource,0)
+	service.resources = make(map[string]DynamicResource, 0)
 	service.prefix = DYNAMIC_PREFIX
 	service.backend = backend
 	if prefix != "" {
@@ -93,7 +93,7 @@ func (r *DynamicStoreImpl) List() map[string]DynamicResource {
 }
 
 func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateChannel) (string, error) {
-	glog.V(VERBOSE_LEVEL).Infof("Creating a new dynamic config, path: %s", path )
+	glog.V(VERBOSE_LEVEL).Infof("Creating a new dynamic config, path: %s", path)
 	if _, found := r.IsDynamic(path); found {
 		glog.Errorf("The dynamic config: %s already exist, we can skip creation", path)
 		return "", nil
@@ -104,7 +104,7 @@ func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateCha
 	- we create watches on the keys / services
 	- and we update the store with a notification
 	*/
-	if resource, err := NewDynamicResource(path, content, r.backend ); err != nil {
+	if resource, err := NewDynamicResource(path, content, r.backend); err != nil {
 		glog.Errorf("Failed to create the templated resournce: %s, error: %s", path, err)
 		return "", err
 	} else {
