@@ -15,4 +15,4 @@ VERBOSITY=${VERBOSITY:-3}
 mkdir -p ${MOUNT_POINT}
 
 echo "Starting ${NAME}, store: ${CONFIG_URL}, discovery: ${DISCOVERY_URL}"
-bin/config-fs -logtostderr=true -v=${VERBOSITY} -store=${CONFIG_URL}
+bin/config-fs -logtostderr=true -v=${VERBOSITY} -store=${CONFIG_URL} -discovery ${DISCOVERY_URL}
