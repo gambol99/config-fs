@@ -53,6 +53,8 @@ type KVStore interface {
 	Mkdir(path string) error
 	/* watch for changes on the key */
 	Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error)
+	/* release all the resources */
+	Close()
 }
 
 func NewKVStore() (KVStore, error) {

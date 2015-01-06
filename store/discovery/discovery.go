@@ -17,6 +17,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -54,4 +57,26 @@ type Discovery interface {
 	WatchService(service string) error
 	/* Close the service down */
 	Close() error
+}
+
+func NewDiscovery(channel ServiceUpdateChannel) (Discovery, error) {
+	/* step: if the discovery url is not set, we can return a dummy provider */
+	if *discovery_url == "" {
+		return NewDummyServiceAgent(), nil
+	} else {
+		if uri, err := url.Parse(*discovery_url); err != nil {
+			glog.Errorf("Failed to parse the discovery url: %s, error: %s", *discovery_url, err)
+			return nil, err
+		} else {
+			switch uri.Scheme {
+			case "consul":
+				service, err := NewConsulServiceAgent(uri, channel)
+				if err != nil {
+					return nil, err
+				}
+				return service, nil
+			}
+		}
+	}
+	return nil, errors.New("Failed to create discovery agent for: " + *discovery_url)
 }
