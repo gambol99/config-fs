@@ -4,7 +4,7 @@
 #
 #  vim:ts=2:sw=2:et
 #
-FROM busybus
+FROM busybox
 MAINTAINER <gambol99@gmail.com>
 
 ADD startup.sh ./startup.sh

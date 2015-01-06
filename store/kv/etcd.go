@@ -52,6 +52,10 @@ func (r *EtcdStoreClient) URL() string {
 	return r.uri
 }
 
+func (r *EtcdStoreClient) Close() {
+	glog.Infof("Shutting down the etcd client")
+}
+
 func (r *EtcdStoreClient) ValidateKey(key string) string {
 	if !strings.HasPrefix(key, "/") {
 		key = "/" + key

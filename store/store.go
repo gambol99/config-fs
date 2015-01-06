@@ -60,7 +60,7 @@ type Store interface {
 	/* shutdown the resources */
 	Close()
 	/* delete the configuration directory */
-	DeleteConfiguration() error
+	Delete() error
 }
 
 /* The implementation of the above */
@@ -109,6 +109,10 @@ func NewConfigurationStore() (Store, error) {
 func (r *ConfigurationStore) Close() {
 	glog.Infof("Request to shutdown and release the resources")
 	r.shutdownChannel <- true
+	/* step: if requested, delete the configuration directory */
+	if *delete_on_exit {
+		r.Delete()
+	}
 }
 
 /* Synchronize the key/value store with the configuration directory */
@@ -165,21 +169,17 @@ func (r *ConfigurationStore) Synchronize() error {
 				/* a timer has kicked off */
 				go r.HandleTimerEvent()
 			case <-r.shutdownChannel:
-				/* we have recieved a request to shutdown */
+				/* we have received a request to shutdown */
 				glog.Infof("Recieved the shutdown signal ... shutting down now")
 				break
 			}
-		}
-		/* step: if requested, delete the configuration directory */
-		if *delete_on_exit {
-			r.DeleteConfiguration()
 		}
 	}()
 	return nil
 }
 
 /* we delete all the configuration files */
-func (r *ConfigurationStore) DeleteConfiguration() error {
+func (r *ConfigurationStore) Delete() error {
 	glog.Infof("Deleting the entire configuration directory: %s as requested", *mount_point)
 	if err := r.fs.Rmdir(*mount_point); err != nil {
 		glog.Errorf("Failed to removing the configuration directory: %s, error: %s", *mount_point, err)
@@ -283,8 +283,7 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 		glog.Errorf("Failed to remove the directory: %s, error: %s", full_path, err)
 		return err
 	}
-	/* We need to find any templates that we're in the directory and delete them, freeing up the
-	resources */
+	/* step: we need to find any templates that we're in the directory and delete them, freeing up the resources */
 	for resource_path, _ := range r.dynamic.List() {
 		if strings.HasPrefix(resource_path, path) {
 			glog.V(3).Infof("Deleting the dynamic config: %s, config was inside deleted directory: %s", resource_path, path)
@@ -301,7 +300,7 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 }
 
 func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
-	/* the actual file system path */
+
 	full_path := r.FullPath(path)
 	glog.V(VERBOSE_INFO).Infof("Creating config directory: %s", full_path)
 
@@ -314,7 +313,7 @@ func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
 }
 
 func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) error {
-	/* the actual file system path */
+
 	full_path := r.FullPath(path)
 	glog.V(VERBOSE_INFO).Infof("Update to config directory, file: %s", full_path)
 
@@ -332,7 +331,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 		recreate a new resource */
 		r.dynamic.Delete(path)
 
-		/* step: recreate the dyanmic config passing our update channel  */
+		/* step: recreate the dynamic config passing our update channel  */
 		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
 			glog.Errorf("Failed to update the template for path: %s, error: %s", path, err)
 			return err
@@ -343,7 +342,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-		/* step: we check if the content of the file is dynamic and we need to create a new dconfig from it */
+	/* step: we check if the content of the file is dynamic and we need to create a new dynamic config from it */
 	} else if r.dynamic.IsDynamicContent(path, value) {
 		glog.V(VERBOSE_INFO).Infof("Creating a new dynamic resource templated resource: %s", path)
 		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
@@ -355,7 +354,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-		/* step: we can assume it's a regular k/v and can create a standard file from its value */
+	/* step: we can assume it's a regular k/v and can create a standard file from its value */
 	} else {
 		/* step: create a normal file from the content */
 		if err := r.fs.Create(full_path, value); err != nil {

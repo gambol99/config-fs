@@ -36,26 +36,21 @@ type ConsulServiceAgent struct {
 	updateChannel ServiceUpdateChannel
 }
 
-func NewConsulServiceAgent(channel ServiceUpdateChannel) (Discovery, error) {
-	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", *discovery_url)
+func NewConsulServiceAgent(uri *url.URL, channel ServiceUpdateChannel) (Discovery, error) {
+	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", uri.String())
 	/* step: parse the url */
-	if uri, err := url.Parse(*discovery_url); err != nil {
-		glog.Errorf("Failed to parse the discovery url: %s, error: %s", *discovery_url, err)
+	config := consulapi.DefaultConfig()
+	config.Address = uri.Host
+	client, err := consulapi.NewClient(config)
+	if err != nil {
+		glog.Errorf("Failed to create the Consul Client, error: %s", err)
 		return nil, err
-	} else {
-		config := consulapi.DefaultConfig()
-		config.Address = uri.Host
-		client, err := consulapi.NewClient(config)
-		if err != nil {
-			glog.Errorf("Failed to create the Consul Client, error: %s", err)
-			return nil, err
-		}
-		agent := new(ConsulServiceAgent)
-		agent.updateChannel = channel
-		agent.watchedServices = make(map[string]chan bool, 0)
-		agent.client = client
-		return agent, nil
 	}
+	agent := new(ConsulServiceAgent)
+	agent.updateChannel = channel
+	agent.watchedServices = make(map[string]chan bool, 0)
+	agent.client = client
+	return agent, nil
 }
 
 func (r *ConsulServiceAgent) Close() error {
