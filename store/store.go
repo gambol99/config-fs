@@ -200,7 +200,7 @@ func (r *ConfigurationStore) HandleTemplateEvent(path string) {
 		glog.Errorf("The resource for path: %s no longer exists, internal error", path)
 		return
 	} else {
-		glog.V(VERBOSE_INFO).Infof("Dynamic config file: %s has changed, regenerating content", path )
+		glog.V(VERBOSE_INFO).Infof("Dynamic config file: %s has changed, regenerating content", path)
 		/* step: we get the content of the template */
 		if content, err := resource.Content(false); err != nil {
 			glog.Errorf("Failed to generate the content from template: %s, error: %s", path, err)
@@ -247,13 +247,13 @@ func (r *ConfigurationStore) HandleNodeEvent(event kv.NodeChange) {
 }
 
 /*
- 	The following methods are related to the deletion, creation and updates on K/V
- 	values and replicating those changes to the config directory
+	The following methods are related to the deletion, creation and updates on K/V
+	values and replicating those changes to the config directory
 */
 
 func (r *ConfigurationStore) DeleteStoreConfigFile(path string) error {
 	full_path := r.FullPath(path)
-	glog.V(VERBOSE_INFO).Infof("Deleting the config file: %s from the store", full_path )
+	glog.V(VERBOSE_INFO).Infof("Deleting the config file: %s from the store", full_path)
 
 	/* step: check it exists and is a file */
 	if !r.fs.Exists(full_path) || !r.fs.IsFile(full_path) {
@@ -286,9 +286,9 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 	/* We need to find any templates that we're in the directory and delete them, freeing up the
 	resources */
 	for resource_path, _ := range r.dynamic.List() {
-		if strings.HasPrefix(resource_path, path ) {
-			glog.V(3).Infof("Deleting the dynamic config: %s, config was inside deleted directory: %s", resource_path, path )
-			r.dynamic.Delete( resource_path )
+		if strings.HasPrefix(resource_path, path) {
+			glog.V(3).Infof("Deleting the dynamic config: %s, config was inside deleted directory: %s", resource_path, path)
+			r.dynamic.Delete(resource_path)
 		}
 	}
 
@@ -343,7 +343,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-	/* step: we check if the content of the file is dynamic and we need to create a new dconfig from it */
+		/* step: we check if the content of the file is dynamic and we need to create a new dconfig from it */
 	} else if r.dynamic.IsDynamicContent(path, value) {
 		glog.V(VERBOSE_INFO).Infof("Creating a new dynamic resource templated resource: %s", path)
 		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
@@ -355,7 +355,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-	/* step: we can assume it's a regular k/v and can create a standard file from its value */
+		/* step: we can assume it's a regular k/v and can create a standard file from its value */
 	} else {
 		/* step: create a normal file from the content */
 		if err := r.fs.Create(full_path, value); err != nil {

@@ -174,12 +174,12 @@ func (r *DynamicConfig) GetValue(key string) string {
 	return ""
 }
 
-func (r *DynamicConfig) GetList(path string) []string  {
+func (r *DynamicConfig) GetList(path string) []string {
 	if paths, err := r.store.List(path); err != nil {
 		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
-		return make([]string,0)
+		return make([]string, 0)
 	} else {
-		list := make([]string,0)
+		list := make([]string, 0)
 		for _, node := range paths {
 			if node.IsFile() {
 				list = append(list, node.Path)
