@@ -16,6 +16,7 @@ package discovery
 import (
 	"time"
 	"net/url"
+	"sync"
 
 	consulapi "github.com/armon/consul-api"
 	"github.com/golang/glog"
@@ -24,15 +25,18 @@ import (
 const DEFAULT_WAIT_TIME = 180
 
 type ConsulServiceAgent struct {
+	sync.Mutex
 	/* the client */
 	client *consulapi.Client
 	/* the wait index */
 	waitIndex uint64
-	/* the shutdown signal */
-	shutdownChannel chan bool
+	/* the stop channels for the services */
+	watchedServices map[string]chan bool
+	/* the channel we use to send updates */
+	updateChannel ServiceUpdateChannel
 }
 
-func NewConsulServiceAgent() (Discovery, error) {
+func NewConsulServiceAgent(channel ServiceUpdateChannel) (Discovery, error) {
 	glog.V(3).Infof("Creating a Consul Discovery Agent, url: %s", *discovery_url)
 	/* step: parse the url */
 	if uri, err := url.Parse(*discovery_url); err != nil {
@@ -47,14 +51,19 @@ func NewConsulServiceAgent() (Discovery, error) {
 			return nil, err
 		}
 		agent := new(ConsulServiceAgent)
+		agent.updateChannel = channel
+		agent.watchedServices = make(map[string]chan bool,0)
 		agent.client = client
 		return agent, nil
 	}
 }
 
 func (r *ConsulServiceAgent) Close() error {
-	glog.Infof("Closing the consul agent")
-	r.shutdownChannel <- true
+	/* step: we iterate the watches and send a shutdown signal to end the goroutine */
+	for service, channel := range r.watchedServices {
+		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service )
+		channel <- true
+	}
 	return nil
 }
 
@@ -73,15 +82,28 @@ func (r *ConsulServiceAgent) ListEndpoints(service string) ([]Endpoint, error) {
 	}
 }
 
-func (r *ConsulServiceAgent) WatchService(service string, updateChannel ServiceUpdateChannel) (chan bool, error) {
-	glog.V(VERBOSE_LEVEL).Infof("WatchServices() watching for changes to service: %s, channel: %v", service, updateChannel)
-	shutdownChannel := make(chan bool)
+func (r *ConsulServiceAgent) WatchService(service string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	/* step: check if the resource is already being monitored */
+	if _, found := r.watchedServices[service]; found {
+		glog.V(VERBOSE_LEVEL).Infof("The service %s is already being watched by this agent, skipping", service )
+		return nil
+	}
+
+	glog.V(VERBOSE_LEVEL).Infof("WatchService() adding a watch for changes to service: %s", service)
+
+	/* step: we create a stop channel which is used by the goroutine below */
+	shutdownChannel := make(chan bool,1)
+	r.watchedServices[service] = shutdownChannel
+
 	go func() {
 		catalog := r.client.Catalog()
 		killOff := false
 		r.waitIndex = uint64(0)
-		/* step wait for a shutdown signal */
 		go func() {
+			/* step: we wait for someone to send a shutdown signal */
 			<-shutdownChannel
 			killOff = true
 		}()
@@ -122,12 +144,12 @@ func (r *ConsulServiceAgent) WatchService(service string, updateChannel ServiceU
 				/* step: update the index */
 				r.waitIndex = meta.LastIndex
 				/* step: send the update upstream */
-				glog.V(VERBOSE_LEVEL).Infof("WatchServices() service: %s changes; sending upstream", service)
-				updateChannel <- service
+				glog.V(VERBOSE_LEVEL).Infof("WatchService() service: %s changes; sending upstream", service)
+				r.updateChannel <- service
 			}
 		}
 	}()
-	return shutdownChannel, nil
+	return nil
 }
 
 func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) Endpoint {

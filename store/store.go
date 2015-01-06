@@ -200,7 +200,7 @@ func (r *ConfigurationStore) HandleTemplateEvent(path string) {
 		return
 	} else {
 		/* step: we get the content of the template */
-		if content, err := resource.Render(); err != nil {
+		if content, err := resource.Content(false); err != nil {
 			glog.Errorf("Failed to generate the content from template: %s, error: %s", path, err)
 			return
 		} else {
@@ -273,7 +273,7 @@ func (r *ConfigurationStore) DeleteStoreConfigFile(path string) error {
 func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 	/* the actual file system path */
 	full_path := r.FullPath(path)
-	glog.V(VERBOSE_LEVEL).Infof("DeleteStoreConfigDirectory() Deleting configuration directory: %s from the store", full_path)
+	glog.V(3).Infof("Deleting configuration directory: %s from the store", full_path)
 	/* step: check it is a actual directory */
 	if _, err := r.CheckDirectory(full_path); err != nil {
 		glog.Errorf("Failed to remove the directory: %s, error: %s", full_path, err)
@@ -294,7 +294,7 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
 	/* the actual file system path */
 	full_path := r.FullPath(path)
-	glog.V(VERBOSE_LEVEL).Infof("CreateStoreConfigDirectory() path: %s", full_path)
+	glog.V(3).Infof("Creating config directory: %s", full_path)
 
 	/* step: we need to make sure the directory structure exists */
 	if err := r.fs.Mkdirp(full_path); err != nil {
@@ -310,7 +310,6 @@ func (r *ConfigurationStore) UpdateStoreConfigDirectory(path string) error {
 func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) error {
 	/* the actual file system path */
 	full_path := r.FullPath(path)
-	glog.V(3).Infof("Updating the file, path: %s", full_path)
 
 	/* step: we need to ensure the directory structure exists */
 	if err := r.fs.Mkdirp(r.fs.Dirname(full_path)); err != nil {
@@ -326,6 +325,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 	*/
 
 	if _, found := r.dynamic.IsDynamic(path); found {
+		glog.V(3).Infof("Dyanmic resource: %s has changes, updating now", path)
 		/* step: delete the resource */
 		r.dynamic.Delete(path)
 		/* step: recreate the template */
@@ -341,7 +341,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 		}
 		/* - A node has changed, its value has a templated resource prefix and hasn't already been created i.e. its a new template */
 	} else if r.dynamic.IsDynamicContent(path, value) {
-		glog.V(VERBOSE_LEVEL).Infof("Creating a new templated resource: %s", path)
+		glog.V(3).Infof("Creating a new dynamic resource templated resource: %s", path)
 		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
 			glog.Errorf("Failed to create the template for path: %s, error: %s", path, err)
 			return err
@@ -352,6 +352,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 			}
 		}
 	} else {
+		glog.V(3).Infof("Creating a new config file: %s", path)
 		/* step: create a normal file from the content */
 		if err := r.fs.Create(full_path, value); err != nil {
 			glog.Errorf("Failed to create the file: %s, error: %s", full_path, err)
@@ -360,8 +361,6 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 	}
 	return nil
 }
-
-/* ======= MISC ========== */
 
 /* Converts the k/v path to the full path on disk - essentially mount_point + node_path */
 func (r *ConfigurationStore) FullPath(path string) string {

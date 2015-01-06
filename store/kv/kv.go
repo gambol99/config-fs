@@ -16,7 +16,6 @@ package kv
 import (
 	"flag"
 	"errors"
-	"fmt"
 	"net/url"
 
 	"github.com/golang/glog"
@@ -37,46 +36,6 @@ func init() {
 	kv_store_url = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
 }
 
-type Action int
-
-const (
-	UNKNOWN = 0
-	CHANGED = 1
-	DELETED = 2
-)
-
-type NodeChange struct {
-	/* The node in question */
-	Node Node
-	/* The event which has occurred */
-	Operation Action
-}
-
-type NodeUpdateChannel chan NodeChange
-
-type Node struct {
-	/* the path for this key */
-	Path string
-	/* the value of the key */
-	Value string
-	/* the type of node it is, directory or file */
-	Directory bool
-}
-
-func (n Node) String() string {
-	return fmt.Sprintf("path: %s, value: %s, type: %s", n.Path, n.Value, n.Directory)
-}
-
-func (n Node) IsDir() bool {
-	return n.Directory
-}
-
-func (n Node) IsFile() bool {
-	if n.Directory {
-		return false
-	}
-	return true
-}
 
 type KVStore interface {
 	/* get the url for the kv store */

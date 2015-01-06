@@ -51,7 +51,7 @@ type Discovery interface {
 	/* Retrieve a list of endpoints for a service */
 	ListEndpoints(service string) ([]Endpoint, error)
 	/* Watch for changes on a service and report back */
-	WatchService(service string, updateChannel ServiceUpdateChannel) (chan bool, error)
+	WatchService(service string) error
 	/* Close the service down */
 	Close() error
 }

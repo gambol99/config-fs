@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"text/template"
+	"sync"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -26,13 +27,14 @@ import (
 type DynamicResource interface {
 	/* watch the dynamic config for changes and send notification via channel */
 	Watch(channel DynamicUpdateChannel)
-	/* render the content of the template */
-	Render() (string, error)
+	/* get the content of the config */
+	Content(forceRefresh bool) (string, error)
 	/* shutdown and release the assets */
 	Close()
 }
 
 type DynamicConfig struct {
+	sync.Mutex
 	/* the path of the file */
 	path string
 	/* the actual template */
@@ -41,11 +43,11 @@ type DynamicConfig struct {
 	discovery discovery.Discovery
 	/* the k/v store */
 	store kv.KVStore
-	/* the keys we are watching */
-	watchingKeys map[string]interface{}
-	/* the services we are watching */
-	watchingServices map[string][]discovery.Endpoint
-	/* the channel for listening to events */
+	/* the generate content */
+	content string
+	/* a map of keys being watched */
+	stopKeyChannels map[string]chan bool
+    /* the channel for listening to events */
 	storeUpdateChannel kv.NodeUpdateChannel
 	/* service update channel */
 	serviceUpdateChannel discovery.ServiceUpdateChannel
@@ -55,49 +57,73 @@ type DynamicConfig struct {
 
 func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource, error) {
 	glog.Infof("Creating new dynamic config, path: %s", path)
-	t := new(DynamicConfig)
-	t.path = path
-	t.store = store
+	config := new(DynamicConfig)
+	config.path = path
+	config.store = store
+	config.stopChannel = make(chan bool, 0)
+	config.stopKeyChannels = make(map[string]chan bool,0)
+	config.storeUpdateChannel = make(kv.NodeUpdateChannel, 5)
+	config.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
 
 	/* step: create a discovery agent */
-	if agent, err := discovery.NewConsulServiceAgent(); err != nil {
-		glog.Errorf("Failed to create the discovery agent, error: %s", err)
+	if agent, err := discovery.NewConsulServiceAgent(config.serviceUpdateChannel); err != nil {
 		return nil, err
 	} else {
-		t.discovery = agent
+		config.discovery = agent
 	}
 
 	/* step: create the function map for this template */
 	functionMap := template.FuncMap{
-		"service": t.FindService,
-		"getv":    t.GetKeyValue,
-		"json":    t.UnmarshallJSON}
-	if tpl, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
-		glog.Errorf("Failed to create the dynamic config: %s, error: %s", path, err)
+		"service": config.FindService,
+		"getv":    config.GetValue,
+		"json":    config.UnmarshallJSON}
+
+	if resource, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
 		return nil, err
 	} else {
-		t.template = tpl
-		t.watchingKeys = make(map[string]interface{}, 0)
-		t.watchingServices = make(map[string][]discovery.Endpoint, 0)
-		t.storeUpdateChannel = make(kv.NodeUpdateChannel, 5)
-		t.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
+		config.template = resource
 	}
-	return t, nil
+	return config, nil
 }
 
 func (r DynamicConfig) Close() {
 	glog.Infof("Closing the resources for dynamic config: %s", r.path)
 	r.stopChannel <- true
+
+}
+
+func (r *DynamicConfig) Content(forceRefresh bool) (string,error) {
+	/* step: get the content from the cache if there and refresh is false */
+	if r.content != "" && forceRefresh == false {
+		return r.content, nil
+	}
+	if err := r.Generate(); err != nil {
+		glog.Errorf("Failed to generate the dynamic content for config: %s, error: %s", r.path, err )
+		return "", err
+	} else {
+		return r.content, nil
+	}
+}
+
+func (r *DynamicConfig) Generate() error {
+ 	r.Lock()
+	defer r.Unlock()
+	if content, err := r.Render(); err != nil {
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
+		return err
+	} else {
+		glog.V(VERBOSE_LEVEL).Infof("Updating the content for config: %s", r.path )
+		/* step: update the cache copy */
+		r.content = content
+	}
+	return nil
 }
 
 func (r *DynamicConfig) Render() (string, error) {
 	var content bytes.Buffer
-	glog.V(VERBOSE_LEVEL).Infof("Render() rendering the dynamic config: %s", r.path)
 	if err := r.template.Execute(&content, nil); err != nil {
-		glog.Errorf("Failed to render the content of file: %s, error: %s", r.path, err)
 		return "", err
 	}
-	/* step: return the rendered content minus the prefix */
 	return content.String()[len(DYNAMIC_PREFIX):], nil
 }
 
@@ -109,59 +135,82 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 			select {
 			case event := <-r.storeUpdateChannel:
 				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, event)
-				r.HandleNodeEvent(event, channel)
+				if err := r.Generate(); err == nil {
+					channel <- r.path
+				}
 			case service := <-r.serviceUpdateChannel:
 				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, service)
-				r.HandleServiceEvent(service, channel)
+				if err := r.Generate(); err == nil {
+					channel <- r.path
+				}
 			case <-r.stopChannel:
 				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
-				/* @@TODO we need to remove the keys from being watched and remove the servics */
+				/* step: close all the watches on the key */
+				for path, channel := range r.stopKeyChannels {
+					glog.V(VERBOSE_LEVEL).Infof("Stopping the k/v watch on key: %s", path )
+					channel <- true
+				}
 			}
 		}
 	}()
 }
 
-/* ============ EVENT HANDLERS ================================ */
-
 func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpdateChannel) {
-	glog.Infof("The key: %s, in dynamic config: %s has change", event, r.path)
+	glog.Infof("The key: %s, in dynamic config: %s has changed", event, r.path)
+	if err := r.Generate(); err != nil {
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
+	} else {
+		channel <- r.path
+	}
 
-	channel <- r.path
 }
 
 func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdateChannel) {
 	glog.Infof("The service: %s in dynamic config: %s has changed, pulling the list", service, r.path)
-	if endpoints, err := r.discovery.ListEndpoints(service); err != nil {
-		glog.Errorf("Failed to update the service: %s, in dynamic config: %s, error: %s", service, r.path, err)
+	if content, err := r.Render(); err != nil {
+		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err )
 	} else {
-		glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, endpoints: %s", r.path, endpoints)
-		/* step: update the endpoints for the services */
-		r.watchingServices[service] = endpoints
+		r.content = content
 		go func() {
 			channel <- r.path
 		}()
 	}
 }
 
-/* ============ TEMPLATE METHODS ============================== */
-
-func (r *DynamicConfig) GetKeyValue(key string) string {
-	/* step: check if we have the value in the map */
-	if content, found := r.watchingKeys[key]; found {
-		return content.(string)
+func (r *DynamicConfig) GetValue(key string) string {
+	/* step: we add a watch on the key */
+	if stopChannel, err := r.store.Watch(key, r.storeUpdateChannel); err != nil {
+		glog.Errorf("Failed to add a watch for key: %s, error: %s", key, err )
+		return ""
 	} else {
+		r.stopKeyChannels[key] = stopChannel
 		/* step: we need to grab the key from the store and store */
 		if content, err := r.store.Get(key); err != nil {
 			glog.Errorf("Failed to get the key: %s, error: %s", key, err)
 			return ""
 		} else {
-			/* step: check if the key is presently being watched */
-			r.watchingKeys[key] = content.Value
-			/* return the content */
 			return content.Value
 		}
 	}
 	return ""
+}
+
+func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
+	glog.V(VERBOSE_LEVEL).Infof("FindService() service: %s", service)
+
+	/* step: we add a watch to the service via the agent, assuming there isnt one already */
+	if err := r.discovery.WatchService(service); err != nil {
+		glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
+		return make([]discovery.Endpoint, 0)
+	}
+	/* step: we retrieve a list of the endpoints from the agent */
+	if list, err := r.discovery.ListEndpoints(service); err != nil {
+		glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err)
+		return make([]discovery.Endpoint, 0)
+	} else {
+		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, dynamic config: %s, endpoints: %s", len(list), service, r.path, list)
+		return list
+	}
 }
 
 func (r *DynamicConfig) UnmarshallJSON(content string) interface{} {
@@ -172,33 +221,4 @@ func (r *DynamicConfig) UnmarshallJSON(content string) interface{} {
 	} else {
 		return json_data
 	}
-}
-
-func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
-	glog.V(VERBOSE_LEVEL).Infof("FindService() provider: %s, service: %s", service)
-	services := make([]discovery.Endpoint, 0)
-
-	if list, found := r.watchingServices[service]; found {
-		glog.V(VERBOSE_LEVEL).Infof("FindService() found service: %s in cache", service)
-		return list
-	} else {
-		/* must be the first time we have run - we need to grab the services and place a watch on the service */
-		if stopChannel, err := r.discovery.WatchService(service, r.serviceUpdateChannel); err != nil {
-			glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
-			return services
-		} else {
-			var _ = stopChannel
-		}
-		/* step: we get a list of the services */
-		list, err := r.discovery.ListEndpoints(service)
-		if err != nil {
-			glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err)
-			return services
-		}
-		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, dynamic config: %s, endpoints: %s", len(list), service, r.path, list)
-		/* step: update the map */
-		r.watchingServices[service] = list
-		return list
-	}
-	return nil
 }

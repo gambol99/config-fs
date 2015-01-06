@@ -29,10 +29,16 @@ const (
 type DynamicUpdateChannel chan string
 
 type DynamicStore interface {
+	/* check if the path is a dyanmic config */
 	IsDynamic(path string) (DynamicResource, bool)
+	/* check if the content is dynamic */
 	IsDynamicContent(path, content string) bool
+	/* create a dyanmic config */
 	Create(path, content string, channel DynamicUpdateChannel) (string, error)
+	/* delete a dynamic config */
 	Delete(path string)
+	/* list the configs */
+	List() map[string]DynamicResource
 }
 
 type DynamicStoreImpl struct {
@@ -76,6 +82,16 @@ func (r *DynamicStoreImpl) IsDynamicContent(path, content string) bool {
 	return false
 }
 
+func (r *DynamicStoreImpl) List() map[string]DynamicResource {
+	list := make(map[string]DynamicResource)
+	r.RLock()
+	defer r.RUnlock()
+	for path, resource := range r.resources {
+		list[path] = resource
+	}
+	return list
+}
+
 func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateChannel) (string, error) {
 	glog.V(VERBOSE_LEVEL).Infof("Creating a new dynamic config, path: %s", path )
 	if _, found := r.IsDynamic(path); found {
@@ -93,7 +109,7 @@ func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateCha
 		return "", err
 	} else {
 		/* step: we generate the dynamic content ready to return */
-		if content, err := resource.Render(); err != nil {
+		if content, err := resource.Content(false); err != nil {
 			glog.Errorf("Failed to render the dynamic config: %s, error: %s", path, err)
 			return "", err
 		} else {
