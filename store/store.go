@@ -17,7 +17,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/gambol99/config-fs/store/fs"
@@ -28,7 +27,6 @@ import (
 )
 
 const (
-	DEFAULT_KV_STORE       = "etcd://localhost:4001"
 	DEFAULT_MOUNT_POINT    = "/config"
 	DEFAULT_DELETE_ON_EXIT = false
 	DEFAULT_PRE_SYNC       = true
@@ -40,13 +38,12 @@ const (
 
 /* --- command line options ---- */
 var (
-	kv_store_url, mount_point *string
+	mount_point *string
 	delete_on_exit, read_only, pre_synchronize *bool
-	refresh_interval          *int
+	refresh_interval *int
 )
 
 func init() {
-	kv_store_url = flag.String("store", DEFAULT_KV_STORE, "the url for key / value store")
 	mount_point = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
 	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
@@ -86,42 +83,24 @@ type ConfigurationStore struct {
 }
 
 /* Create a new configuration store */
-func NewStore() (Store, error) {
-	glog.Infof("Creating a new configuration store, mountpoint: '%s', kv: '%s'", *mount_point, *kv_store_url)
-	if service, err := NewConfigurationStore(); err != nil {
-		glog.Errorf("Failed to create a configuration store provider: %s, error: %s", *kv_store_url, err)
+func NewConfigurationStore() (Store, error) {
+	glog.Infof("Creating a new configuration store, mountpoint: '%s'")
+	/* step: we create the kv store */
+	if kvstore, err := kv.NewKVStore(); err != nil {
+		glog.Errorf("Failed to create the K/V Store, error: %s", err )
 		return nil, err
 	} else {
-		return &ConfigurationStore{
-			fs:                     fs.NewStoreFS(),
-			kv:                     service,
-			dynamic: 			    dynamic.NewDynamicStore(DEFAULT_DYNAMIC_PREFIX, service),
-			shutdownChannel:        make(chan bool, 1),
-			nodeEventChannel:       make(kv.NodeUpdateChannel, 10),
-			dynamicEventChannel:   make(dynamic.DynamicUpdateChannel, 10),
-			filesystemEventChannel: make(WatchServiceChannel, 10),
-			timerEventChannel:      time.NewTicker(time.Duration(*refresh_interval) * time.Second)}, nil
-	}
-}
-
-func NewConfigurationStore() (kv.KVStore, error) {
-	glog.Infof("Creating a new configuration provider: %s", *kv_store_url)
-	/* step: parse the url */
-	if uri, err := url.Parse(*kv_store_url); err != nil {
-		glog.Errorf("Failed to parse the url: %s, error: %s", *kv_store_url, err)
-		return nil, err
-	} else {
-		switch uri.Scheme {
-		case "etcd":
-			agent, err := kv.NewEtcdStoreClient(uri)
-			if err != nil {
-				glog.Errorf("Failed to create the K/V agent, error: %s", err)
-				return nil, err
-			}
-			return agent, nil
-		default:
-			return nil, errors.New("Unsupported key/value store: " + *kv_store_url)
-		}
+		/* step; create the configuration store */
+		service := new(ConfigurationStore)
+		service.fs = fs.NewStoreFS()
+		service.kv = kvstore
+		service.dynamic = dynamic.NewDynamicStore(DEFAULT_DYNAMIC_PREFIX, kvstore)
+		service.shutdownChannel = make(chan bool, 1)
+		service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
+		service.dynamicEventChannel = make(dynamic.DynamicUpdateChannel, 10)
+		service.filesystemEventChannel = make(WatchServiceChannel, 10)
+		service.timerEventChannel =  time.NewTicker(time.Duration(*refresh_interval) * time.Second)
+		return service, nil
 	}
 }
 
@@ -144,7 +123,7 @@ func (r *ConfigurationStore) Synchronize() error {
 
 	/* step: perform a one-time build of the configuration store */
 	if *pre_synchronize {
-		glog.Infof("Starting the sychronization between mount: %s and store: %s", *mount_point, *kv_store_url)
+		glog.Infof("Starting the sychronization between mount: %s and store: %s", *mount_point, r.kv.URL() )
 		if err := r.BuildFileSystem(); err != nil {
 			glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 			return err
@@ -264,9 +243,6 @@ func (r *ConfigurationStore) HandleNodeEvent(event kv.NodeChange) {
 		glog.Errorf("HandleNodeEvent() unknown operation, skipping the event: %s", event)
 	}
 }
-
-/* ======================= TEMPLATED RESOURCES ========================== */
-
 
 /* ====================== Store K/V handling =========================== */
 
