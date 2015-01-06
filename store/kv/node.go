@@ -14,39 +14,8 @@ limitations under the License.
 package kv
 
 import (
-	"errors"
 	"fmt"
-
-	"github.com/golang/glog"
 )
-
-const STORE_VERBOSE_LEVEL = 6
-
-var InvalidUrlErr = errors.New("Invalid URI error, please check backend url")
-var InvalidDirectoryErr = errors.New("Invalid directory specified")
-
-func Verbose(message string, args ...interface{}) {
-	glog.V(STORE_VERBOSE_LEVEL).Infof(message, args)
-}
-
-type NodeUpdateChannel chan NodeChange
-
-type KVStore interface {
-	/* retrieve a key from the store */
-	Get(key string) (*Node, error)
-	/* Get a list of all the nodes under the path */
-	List(path string) ([]*Node, error)
-	/* set a key in the store */
-	Set(key string, value string) error
-	/* delete a key from the store */
-	Delete(key string) error
-	/* recursively delete a path */
-	RemovePath(path string) error
-	/* Create a directory node */
-	Mkdir(path string) error
-	/* watch for changes on the key */
-	Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error)
-}
 
 type Action int
 
@@ -62,6 +31,8 @@ type NodeChange struct {
 	/* The event which has occurred */
 	Operation Action
 }
+
+type NodeUpdateChannel chan NodeChange
 
 type Node struct {
 	/* the path for this key */

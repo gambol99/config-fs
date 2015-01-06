@@ -14,10 +14,11 @@ limitations under the License.
 package store
 
 import (
-	"sync"
 	"os"
 	"path/filepath"
+	"sync"
 
+	"github.com/gambol99/config-fs/store/fs"
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
 )
@@ -48,17 +49,17 @@ type Watcher struct {
 type WatchServiceChannel chan *fsnotify.Event
 
 /* create an instance */
-func NewWatchService() (WatchService,error) {
+func NewWatchService() (WatchService, error) {
 	glog.Infof("Creating a new Watch Service")
 	/* step: create a watcher */
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
-		glog.Errorf("Failed to create a watcher, error: %s", err )
+		glog.Errorf("Failed to create a watcher, error: %s", err)
 		return nil, err
 	} else {
 		service := new(Watcher)
-		service.listeners = make(map[WatchServiceChannel]bool,0)
+		service.listeners = make(map[WatchServiceChannel]bool, 0)
 		service.watcher = watcher
-		service.directories = make(map[string]bool,0)
+		service.directories = make(map[string]bool, 0)
 		return service, nil
 	}
 }
@@ -77,19 +78,19 @@ func (r *Watcher) RemoveDirectoryWatch(path string) error {
 
 /* add a listener for changes in the file system */
 func (r *Watcher) AddWatchListener(listener WatchServiceChannel) {
-	glog.V(VERBOSE_LEVEL).Infof("Adding the new event listener: %v", listener )
+	glog.V(VERBOSE_LEVEL).Infof("Adding the new event listener: %v", listener)
 	r.Lock()
 	defer r.Unlock()
 	r.listeners[listener] = true
 }
 
 func (r *Watcher) RemoveWatchLister(listener WatchServiceChannel) {
-	glog.V(VERBOSE_LEVEL).Infof("Removing the listen: %v from the list", listener )
+	glog.V(VERBOSE_LEVEL).Infof("Removing the listen: %v from the list", listener)
 	r.Lock()
 	defer r.Unlock()
 	for channel, _ := range r.listeners {
 		if channel == listener {
-			delete(r.listeners,channel)
+			delete(r.listeners, channel)
 			return
 		}
 	}
@@ -104,7 +105,7 @@ func (r *Watcher) AddDirectoryWatch(path string) error {
 	} else {
 		if directory == false {
 			glog.Errorf("Failed to add directory watch on: %s, directory does not exist", path)
-			return DirectoryDoesNotExistErr
+			return fs.DirectoryDoesNotExistErr
 		}
 	}
 
@@ -143,7 +144,7 @@ func (r *Watcher) Exists(path string) bool {
 	return true
 }
 
-func (r *Watcher) IsDirectory(path string) (bool,error) {
+func (r *Watcher) IsDirectory(path string) (bool, error) {
 	if found := r.Exists(path); !found {
 		return false, nil
 	}
@@ -158,19 +159,19 @@ func (r *Watcher) IsDirectory(path string) (bool,error) {
 func (r *Watcher) ListDirectories(path string) ([]string, error) {
 	paths := make([]string, 0)
 	if err := filepath.Walk(path, (filepath.WalkFunc)(func(file_path string, info os.FileInfo, err error) error {
-			if err != nil {
-				glog.Errorf("Failed to walk the directory: %s", file_path)
-				return err
+		if err != nil {
+			glog.Errorf("Failed to walk the directory: %s", file_path)
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name != "." && name != ".." {
+				return filepath.SkipDir
 			}
-			if info.IsDir() {
-				name := info.Name()
-				if name != "." && name != ".." {
-					return filepath.SkipDir
-				}
-				paths = append(paths, file_path)
-			}
-			return nil
-		})); err != nil {
+			paths = append(paths, file_path)
+		}
+		return nil
+	})); err != nil {
 		glog.Errorf("Failed to walk the directory: %s, error: %s", path, err)
 		return nil, err
 	}

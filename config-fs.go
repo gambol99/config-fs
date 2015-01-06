@@ -27,7 +27,7 @@ func main() {
 	/* step: parse the command line options */
 	flag.Parse()
 	/* step: create the configuration store */
-	storefs, err := store.NewStore()
+	storefs, err := store.NewConfigurationStore()
 	if err != nil {
 		glog.Errorf("Failed to initialize a configuration fs, error: %s", err)
 		os.Exit(1)

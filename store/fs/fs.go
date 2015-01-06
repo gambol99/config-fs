@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package store
+package fs
 
 import (
 	"crypto/md5"
@@ -31,10 +31,6 @@ const (
 	DEFAULT_DIRECTORY_PERMS = 0755
 	DEFAULT_FILE_PERMS      = 0644
 )
-
-func Verbose(message string, args ...interface{}) {
-	glog.V(VERBOSE_LEVEL).Infof(message, args)
-}
 
 var (
 	DoesNotExistErr          = errors.New("The request entruy does not exists")
@@ -71,11 +67,9 @@ type FileStore interface {
 	Touch(path string) error
 	/* parent directory */
 	Dirname(path string) string
-
 }
 
 type StoreFS struct {
-
 }
 
 func NewStoreFS() FileStore {
@@ -321,4 +315,3 @@ func (r *StoreFS) ListDirectories(path string) ([]string, error) {
 	}
 	return paths, nil
 }
-
