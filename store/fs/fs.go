@@ -102,26 +102,43 @@ func (r *StoreFS) Create(path string, value string) error {
 }
 
 func (r *StoreFS) Update(path string, value string) error {
-	if !r.Exists(path) {
-		glog.Errorf("The file: %s does not exist", path)
-		return FileDoesNotExistErr
-	}
-	if !r.IsFile(path) {
-		glog.Errorf("The file: %s is not a file", path)
+	if !r.Exists(path) || !r.IsFile(path) {
+		glog.Errorf("The file: %s does not exist or is not a file", path)
 		return NotFileErr
 	}
-	/* open and update */
-	if file, err := os.Open(path); err != nil {
-		glog.Errorf("Failed to open %s, error: %s", path, err)
+
+	/* step: we only update if the content is different */
+	if file_sum, err := r.Hash(path); err != nil {
+		glog.Errorf("Failed to generate a hash on the file: %s, error: %s", path, err )
 		return err
 	} else {
-		defer file.Close()
-		if _, err := file.WriteString(value); err != nil {
-			glog.Errorf("Failed to update the content of file: %s, error: %s", path, err)
-			return err
+		/* step: get a hash of the new content */
+		content_sum := r.HashString(value)
+		glog.V(VERBOSE_LEVEL).Infof("Update() current: %s, new: %s hashes", file_sum, content_sum )
+
+		if file_sum == content_sum {
+			glog.Infof("The content of config file: %s has not changed, skipping the update", path )
+		} else {
+			if fs, err := os.Create(path); err != nil {
+				glog.Errorf("Failed to create the file: %s, error: %s", path, err)
+				return err
+			} else {
+				defer fs.Close()
+				if _, err := fs.WriteString(value); err != nil {
+					glog.Errorf("Failed to write the contents to file, error: %s", err)
+				}
+				/* step: ensure the perms to read only */
+				fs.Chmod(os.FileMode(DEFAULT_FILE_PERMS))
+			}
 		}
 	}
 	return nil
+}
+
+func (r *StoreFS) HashString(content string) string {
+	hasher := md5.New()
+	io.WriteString(hasher, content)
+	return string(hasher.Sum(nil)[:])
 }
 
 func (r *StoreFS) Delete(path string) error {
