@@ -282,7 +282,7 @@ func (r *ConfigurationStore) DeleteStoreConfigDirectory(path string) error {
 	}
 	/* We need to find any templates that we're in the directory and delete them, freeing up the
 	resources */
-	for resource_path, resource := range r.dynamic.List() {
+	for resource_path, _ := range r.dynamic.List() {
 		if strings.HasPrefix(resource_path, path ) {
 			glog.V(3).Infof("Deleting the dynamic config: %s, config was inside deleted directory: %s", resource_path, path )
 			r.dynamic.Delete( resource_path )
