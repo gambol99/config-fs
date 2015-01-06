@@ -76,6 +76,7 @@ func NewDynamicResource(path, content string, store kv.KVStore) (DynamicResource
 	functionMap := template.FuncMap{
 		"service": config.FindService,
 		"getv":    config.GetValue,
+		"getr":    config.GetList,
 		"json":    config.UnmarshallJSON}
 
 	if resource, err := template.New(path).Funcs(functionMap).Parse(content); err != nil {
@@ -155,28 +156,6 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 	}()
 }
 
-func (r *DynamicConfig) HandleNodeEvent(event kv.NodeChange, channel DynamicUpdateChannel) {
-	glog.Infof("The key: %s, in dynamic config: %s has changed", event, r.path)
-	if err := r.Generate(); err != nil {
-		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err)
-	} else {
-		channel <- r.path
-	}
-
-}
-
-func (r *DynamicConfig) HandleServiceEvent(service string, channel DynamicUpdateChannel) {
-	glog.Infof("The service: %s in dynamic config: %s has changed, pulling the list", service, r.path)
-	if content, err := r.Render(); err != nil {
-		glog.Errorf("Failed to re-generate the content for config: %s, error: %s", r.path, err)
-	} else {
-		r.content = content
-		go func() {
-			channel <- r.path
-		}()
-	}
-}
-
 func (r *DynamicConfig) GetValue(key string) string {
 	/* step: we add a watch on the key */
 	if stopChannel, err := r.store.Watch(key, r.storeUpdateChannel); err != nil {
@@ -193,6 +172,21 @@ func (r *DynamicConfig) GetValue(key string) string {
 		}
 	}
 	return ""
+}
+
+func (r *DynamicConfig) GetList(path string) []string  {
+	if paths, err := r.store.List(path); err != nil {
+		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
+		return make([]string,0)
+	} else {
+		list := make([]string,0)
+		for _, node := range paths {
+			if node.IsFile() {
+				list = append(list, node.Path)
+			}
+		}
+		return list
+	}
 }
 
 func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
