@@ -4,7 +4,7 @@
 #
 #  vim:ts=2:sw=2:et
 #
-FROM centos
+FROM busybus
 MAINTAINER <gambol99@gmail.com>
 
 ADD startup.sh ./startup.sh
