@@ -340,7 +340,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-	/* step: we check if the content of the file is dynamic and we need to create a new dynamic config from it */
+		/* step: we check if the content of the file is dynamic and we need to create a new dynamic config from it */
 	} else if r.dynamic.IsDynamicContent(path, value) {
 		glog.V(VERBOSE_INFO).Infof("Creating a new dynamic resource templated resource: %s", path)
 		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
@@ -352,7 +352,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 				return err
 			}
 		}
-	/* step: we can assume it's a regular k/v and can create a standard file from its value */
+		/* step: we can assume it's a regular k/v and can create a standard file from its value */
 	} else {
 		/* step: create a normal file from the content */
 		if err := r.fs.Create(full_path, value); err != nil {

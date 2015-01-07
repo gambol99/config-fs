@@ -14,11 +14,11 @@ limitations under the License.
 package kv
 
 import (
+	"errors"
 	"net/url"
 	"strings"
-	"time"
-	"errors"
 	"sync"
+	"time"
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/golang/glog"
@@ -54,7 +54,7 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 	store.hosts = make([]string, 0)
 	store.uri = location.String()
 	store.channel = channel
-	store.watchedKeys = make(map[string]bool,0)
+	store.watchedKeys = make(map[string]bool, 0)
 	for _, host := range strings.Split(location.Host, ",") {
 		store.hosts = append(store.hosts, "http://"+host)
 	}
@@ -188,7 +188,7 @@ func (r *EtcdStoreClient) Watch(key string) {
 	defer r.Unlock()
 	/* step: we check if the key is being watched and if not add it */
 	if _, found := r.watchedKeys[key]; found {
-		glog.V(VERBOSE_LEVEL).Infof("Thy key: %s is already being wathed, skipping for now", key )
+		glog.V(VERBOSE_LEVEL).Infof("Thy key: %s is already being wathed, skipping for now", key)
 	} else {
 		glog.V(VERBOSE_LEVEL).Infof("Adding a watch on the key: %s", key)
 		r.watchedKeys[key] = true
@@ -204,7 +204,7 @@ func (r *EtcdStoreClient) WatchEvents() {
 		go func() {
 			/* step: wait for the shutdown signal */
 			<-r.stopchannel
-			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.basekey )
+			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.basekey)
 			killOffWatch = true
 		}()
 		for {
@@ -241,7 +241,7 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 	for watch_key, _ := range r.watchedKeys {
 		glog.V(VERBOSE_LEVEL).Infof("Checking the changed key: %s against: %s", path, watch_key)
 		if strings.HasPrefix(path, watch_key) {
-			glog.V(VERBOSE_LEVEL).Infof("Sending notification of change on key: %s, channel: %v, event: %v", path, r.channel, response )
+			glog.V(VERBOSE_LEVEL).Infof("Sending notification of change on key: %s, channel: %v, event: %v", path, r.channel, response)
 			/* step: we create an event and send upstream */
 			var event NodeChange
 			event.Node.Path = response.Node.Key
