@@ -41,6 +41,8 @@ type KVStore interface {
 	URL() string
 	/* retrieve a key from the store */
 	Get(key string) (*Node, error)
+	/* List all the keys under a path */
+	Paths(path string, paths *[]string) ([]string, error)
 	/* Get a list of all the nodes under the path */
 	List(path string) ([]*Node, error)
 	/* set a key in the store */
@@ -52,12 +54,12 @@ type KVStore interface {
 	/* Create a directory node */
 	Mkdir(path string) error
 	/* watch for changes on the key */
-	Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error)
+	Watch(key string)
 	/* release all the resources */
 	Close()
 }
 
-func NewKVStore() (KVStore, error) {
+func NewKVStore(channel NodeUpdateChannel) (KVStore, error) {
 	glog.Infof("Creating a new configuration provider: %s", *kv_store_url)
 	/* step: parse the url */
 	if uri, err := url.Parse(*kv_store_url); err != nil {
@@ -66,7 +68,7 @@ func NewKVStore() (KVStore, error) {
 	} else {
 		switch uri.Scheme {
 		case "etcd":
-			agent, err := NewEtcdStoreClient(uri)
+			agent, err := NewEtcdStoreClient(uri, channel)
 			if err != nil {
 				glog.Errorf("Failed to create the K/V agent, error: %s", err)
 				return nil, err

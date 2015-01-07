@@ -104,7 +104,7 @@ func (r *DynamicStoreImpl) Create(path, content string, channel DynamicUpdateCha
 	- we create watches on the keys / services
 	- and we update the store with a notification
 	*/
-	if resource, err := NewDynamicResource(path, content, r.backend); err != nil {
+	if resource, err := NewDynamicResource(path, content); err != nil {
 		glog.Errorf("Failed to create the templated resournce: %s, error: %s", path, err)
 		return "", err
 	} else {
