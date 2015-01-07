@@ -68,6 +68,7 @@ func NewDynamicResource(filename, content string) (DynamicResource, error) {
 		glog.Errorf("Failed to create a kv agent, error: %s", err )
 		return nil, err
 	} else {
+		config.store = agent
 		config.stopChannel = make(chan bool, 0)
 		config.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
 		/* step: create a discovery agent */
