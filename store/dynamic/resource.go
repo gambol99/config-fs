@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"errors"
+	"fmt"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -78,17 +79,18 @@ func NewDynamicResource(filename, content string, store kv.KVStore) (DynamicReso
 
 	/* step: create the function map for this template */
 	functionMap := template.FuncMap{
-		"service": 	config.FindService,
-		"get":     	config.GetKeyPair,
-		"getv":    	config.GetValue,
-		"getr":    	config.GetList,
-		"json":    	config.UnmarshallJSON,
-		"jsona":    config.UnmarshallJSONArray,
-		"base":		path.Base,
-		"dir": 		path.Dir,
-		"split": 	strings.Split,
-		"getenv": 	os.Getenv,
-		"join": 	strings.Join}
+		"service": 	 config.FindService,
+		"endpoints": config.FindEndpoints,
+		"get":     	 config.GetKeyPair,
+		"getv":    	 config.GetValue,
+		"getr":    	 config.GetList,
+		"json":    	 config.UnmarshallJSON,
+		"jsona":     config.UnmarshallJSONArray,
+		"base":		 path.Base,
+		"dir": 		 path.Dir,
+		"split": 	 strings.Split,
+		"getenv": 	 os.Getenv,
+		"join": 	 strings.Join}
 
 	if resource, err := template.New(filename).Funcs(functionMap).Parse(content); err != nil {
 		glog.Errorf("Failed to parse the dynamic config: %s, error: %s", config.path, err )
@@ -188,6 +190,17 @@ func (r *DynamicConfig) FindService(service string) []discovery.Endpoint {
 		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, dynamic config: %s, endpoints: %s", len(list), service, r.path, list)
 		return list
 	}
+}
+
+func (r *DynamicConfig) FindEndpoints(service string) []string {
+	glog.V(VERBOSE_LEVEL).Infof("FindEndpoints() service: %s", service )
+	/* step: a list of endpoints <address>:<port> */
+	list := make([]string,0)
+	/* step: find some endpoints */
+	for _, endpoint := range r.FindService(service) {
+		list = append(list, fmt.Sprintf("%s:%s", endpoint.Address, endpoint.Port))
+	}
+	return list
 }
 
 func (r *DynamicConfig) Exists(key string) bool {
