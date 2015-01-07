@@ -4,10 +4,12 @@
 #
 #  vim:ts=2:sw=2:et
 #
-FROM busybox
+FROM progrium/busybox
 MAINTAINER <gambol99@gmail.com>
 
 ADD startup.sh ./startup.sh
+RUN opkg-install curl
 RUN curl -ksL https://drone.io/github.com/gambol99/config-fs/files/config-fs.gz | gunzip - > /bin/config-fs
 RUN chmod +x /startup.sh; chmod +x /bin/config-fs
+
 ENTRYPOINT [ "/startup.sh" ]
