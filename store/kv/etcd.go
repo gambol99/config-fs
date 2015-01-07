@@ -28,7 +28,7 @@ type EtcdStoreClient struct {
 	/* a lock for the watcher map */
 	sync.RWMutex
 	/* the base root key */
-	basekey string
+	baseKey string
 	/* the url of the etcd hosts */
 	uri string
 	/* a list of etcd hosts */
@@ -36,7 +36,7 @@ type EtcdStoreClient struct {
 	/* the etcd client - under the hood is http client which should be pooled i believe */
 	client *etcd.Client
 	/* stop channel for the client */
-	stopchannel chan bool
+	stopChannel chan bool
 	/* the update channel we send our changes to */
 	channel NodeUpdateChannel
 	/* a map of keys presently being watched */
@@ -44,13 +44,9 @@ type EtcdStoreClient struct {
 }
 
 func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, error) {
-	glog.Infof("Creating a Etcd Agent for K/V Store, url: %s", location)
-	if location.Scheme != "etcd" {
-		glog.Errorf("Invalid url: %s, must start with etcd", location)
-		return nil, InvalidUrlErr
-	}
+	/* step: create the client */
 	store := new(EtcdStoreClient)
-	store.basekey = "/"
+	store.baseKey = "/"
 	store.hosts = make([]string, 0)
 	store.uri = location.String()
 	store.channel = channel
@@ -58,13 +54,15 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 	for _, host := range strings.Split(location.Host, ",") {
 		store.hosts = append(store.hosts, "http://"+host)
 	}
-	glog.Infof("Creating a Etcd Client, hosts: %s", store.hosts)
+	glog.Infof("Creating a Etcd Agent for K/V Store, host: %s", store.hosts)
+
 	/* step: create the etcd client */
 	store.client = etcd.NewClient(store.hosts)
 	store.client.SetConsistency(etcd.WEAK_CONSISTENCY)
+
 	/* step: start watching for events */
 	store.WatchEvents()
-	/* step: return the handle */
+
 	return store, nil
 }
 
@@ -74,7 +72,7 @@ func (r *EtcdStoreClient) URL() string {
 
 func (r *EtcdStoreClient) Close() {
 	glog.Infof("Shutting down the etcd client")
-	r.stopchannel <- true
+	r.stopChannel <- true
 }
 
 func (r *EtcdStoreClient) ValidateKey(key string) string {
@@ -143,26 +141,20 @@ func (r *EtcdStoreClient) Mkdir(path string) error {
 }
 
 func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
-	if !strings.HasPrefix(path, "/") || path == "" {
-		path = "/" + path
-	}
-	glog.V(VERBOSE_LEVEL).Infof("List() path: %s", path)
-
+	key := r.ValidateKey(path)
+	glog.V(VERBOSE_LEVEL).Infof("List() path: %s", key)
 	if response, err := r.GetRaw(path); err != nil {
-		glog.Errorf("List() failed to get path: %s, error: %s", path, err)
+		glog.Errorf("List() failed to get path: %s, error: %s", key, err)
 		return nil, err
 	} else {
-		glog.V(VERBOSE_LEVEL).Infof("List() path: %s, response: %v", path, response)
-
 		list := make([]*Node, 0)
 		if response.Node.Dir == false {
-			glog.Errorf("List() path: %s is not a directory node", path)
+			glog.Errorf("List() path: %s is not a directory node", key)
 			return nil, InvalidDirectoryErr
 		}
 		for _, item := range response.Node.Nodes {
 			list = append(list, r.CreateNode(item))
 		}
-		glog.V(5).Infof("List() path: %s, nodes: %v", list)
 		return list, nil
 	}
 }
@@ -196,15 +188,16 @@ func (r *EtcdStoreClient) Watch(key string) {
 }
 
 func (r *EtcdStoreClient) WatchEvents() {
-	glog.Infof("Starting the event handler for etcd client")
+	glog.V(VERBOSE_LEVEL).Infof("Starting the event handler for etcd client")
+
 	/* step: we create a stop channel and add the key */
-	r.stopchannel = make(chan bool)
+	r.stopChannel = make(chan bool)
 	go func() {
 		killOffWatch := false
 		go func() {
 			/* step: wait for the shutdown signal */
-			<-r.stopchannel
-			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.basekey)
+			<-r.stopChannel
+			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.baseKey)
 			killOffWatch = true
 		}()
 		for {
@@ -212,9 +205,9 @@ func (r *EtcdStoreClient) WatchEvents() {
 				break
 			}
 			/* step: apply a watch on the key and wait */
-			response, err := r.client.Watch(r.basekey, uint64(0), true, nil, r.stopchannel)
+			response, err := r.client.Watch(r.baseKey, uint64(0), true, nil, r.stopChannel)
 			if err != nil {
-				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.basekey, err)
+				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
@@ -237,11 +230,11 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 	defer r.RUnlock()
 	/* step: iterate the list and find out if our key is being watched */
 	path := response.Node.Key
-	glog.V(VERBOSE_LEVEL).Infof("Checking is key: %s is being watched", path)
+	glog.V(VERBOSE_LEVEL).Infof("Checking if key: %s is being watched", path)
 	for watch_key, _ := range r.watchedKeys {
-		glog.V(VERBOSE_LEVEL).Infof("Checking the changed key: %s against: %s", path, watch_key)
 		if strings.HasPrefix(path, watch_key) {
 			glog.V(VERBOSE_LEVEL).Infof("Sending notification of change on key: %s, channel: %v, event: %v", path, r.channel, response)
+
 			/* step: we create an event and send upstream */
 			var event NodeChange
 			event.Node.Path = response.Node.Key
@@ -253,6 +246,7 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 			case "delete":
 				event.Operation = DELETED
 			}
+
 			/* step: send the event upstream via the channel */
 			r.channel <- event
 			return
