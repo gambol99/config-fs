@@ -17,34 +17,54 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"errors"
+	"sync"
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/golang/glog"
 )
 
 type EtcdStoreClient struct {
+	/* a lock for the watcher map */
+	sync.RWMutex
+	/* the base root key */
+	basekey string
+	/* the url of the etcd hosts */
 	uri string
 	/* a list of etcd hosts */
 	hosts []string
 	/* the etcd client - under the hood is http client which should be pooled i believe */
 	client *etcd.Client
+	/* stop channel for the client */
+	stopchannel chan bool
+	/* the update channel we send our changes to */
+	channel NodeUpdateChannel
+	/* a map of keys presently being watched */
+	watchedKeys map[string]bool
 }
 
-func NewEtcdStoreClient(location *url.URL) (KVStore, error) {
+func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, error) {
 	glog.Infof("Creating a Etcd Agent for K/V Store, url: %s", location)
 	if location.Scheme != "etcd" {
 		glog.Errorf("Invalid url: %s, must start with etcd", location)
 		return nil, InvalidUrlErr
 	}
 	store := new(EtcdStoreClient)
+	store.basekey = "/"
 	store.hosts = make([]string, 0)
 	store.uri = location.String()
+	store.channel = channel
+	store.watchedKeys = make(map[string]bool,0)
 	for _, host := range strings.Split(location.Host, ",") {
 		store.hosts = append(store.hosts, "http://"+host)
 	}
 	glog.Infof("Creating a Etcd Client, hosts: %s", store.hosts)
+	/* step: create the etcd client */
 	store.client = etcd.NewClient(store.hosts)
 	store.client.SetConsistency(etcd.WEAK_CONSISTENCY)
+	/* step: start watching for events */
+	store.WatchEvents()
+	/* step: return the handle */
 	return store, nil
 }
 
@@ -54,6 +74,7 @@ func (r *EtcdStoreClient) URL() string {
 
 func (r *EtcdStoreClient) Close() {
 	glog.Infof("Shutting down the etcd client")
+	r.stopchannel <- true
 }
 
 func (r *EtcdStoreClient) ValidateKey(key string) string {
@@ -146,37 +167,98 @@ func (r *EtcdStoreClient) List(path string) ([]*Node, error) {
 	}
 }
 
-func (r *EtcdStoreClient) Watch(key string, updateChannel NodeUpdateChannel) (chan bool, error) {
-	glog.V(VERBOSE_LEVEL).Infof("Watch() key: %s, channel: %V", key, updateChannel)
-	stopChannel := make(chan bool)
+func (e *EtcdStoreClient) Paths(path string, paths *[]string) ([]string, error) {
+	response, err := e.client.Get(path, false, true)
+	if err != nil {
+		return nil, errors.New("Unable to complete walking the tree" + err.Error())
+	}
+	for _, node := range response.Node.Nodes {
+		if node.Dir {
+			e.Paths(node.Key, paths)
+		} else {
+			glog.Infof("Found service container: %s appending now", node.Key)
+			*paths = append(*paths, node.Key)
+		}
+	}
+	return *paths, nil
+}
+
+func (r *EtcdStoreClient) Watch(key string) {
+	r.Lock()
+	defer r.Unlock()
+	/* step: we check if the key is being watched and if not add it */
+	if _, found := r.watchedKeys[key]; found {
+		glog.V(VERBOSE_LEVEL).Infof("Thy key: %s is already being wathed, skipping for now", key )
+	} else {
+		glog.V(VERBOSE_LEVEL).Infof("Adding a watch on the key: %s", key)
+		r.watchedKeys[key] = true
+	}
+}
+
+func (r *EtcdStoreClient) WatchEvents() {
+	glog.Infof("Starting the event handler for etcd client")
+	/* step: we create a stop channel and add the key */
+	r.stopchannel = make(chan bool)
 	go func() {
 		killOffWatch := false
 		go func() {
 			/* step: wait for the shutdown signal */
-			<-stopChannel
-			glog.V(VERBOSE_LEVEL).Infof("Watch() killing off the watch on key: %s", key)
+			<-r.stopchannel
+			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.basekey )
 			killOffWatch = true
 		}()
 		for {
 			if killOffWatch {
-				glog.V(VERBOSE_LEVEL).Infof("Watch() exitting the watch on key: %s", key)
 				break
 			}
-			response, err := r.client.Watch(key, uint64(0), true, nil, stopChannel)
+			/* step: apply a watch on the key and wait */
+			response, err := r.client.Watch(r.basekey, uint64(0), true, nil, r.stopchannel)
 			if err != nil {
-				glog.Errorf("Watch() error attempting to watch the key: %s, error: %s", key, err)
+				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.basekey, err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
+			/* step: have we been requested to quit */
 			if killOffWatch {
 				continue
 			}
-			/* step: pass the change upstream */
-			glog.V(VERBOSE_LEVEL).Infof("Watch() sending the change for key: %s upstream, event: %v", key, response)
-			updateChannel <- r.GetNodeEvent(response)
+			/* step: cool - we have a notification - lets check if this key is being watched */
+			go r.ProcessNodeChange(response)
 		}
 	}()
-	return stopChannel, nil
+}
+
+func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
+	/* step: are there any keys being watched */
+	if len(r.watchedKeys) <= 0 {
+		return
+	}
+	r.RLock()
+	defer r.RUnlock()
+	/* step: iterate the list and find out if our key is being watched */
+	path := response.Node.Key
+	glog.V(VERBOSE_LEVEL).Infof("Checking is key: %s is being watched", path)
+	for watch_key, _ := range r.watchedKeys {
+		glog.V(VERBOSE_LEVEL).Infof("Checking the changed key: %s against: %s", path, watch_key)
+		if strings.HasPrefix(path, watch_key) {
+			glog.V(VERBOSE_LEVEL).Infof("Sending notification of change on key: %s, channel: %v, event: %v", path, r.channel, response )
+			/* step: we create an event and send upstream */
+			var event NodeChange
+			event.Node.Path = response.Node.Key
+			event.Node.Value = response.Node.Value
+			event.Node.Directory = response.Node.Dir
+			switch response.Action {
+			case "set":
+				event.Operation = CHANGED
+			case "delete":
+				event.Operation = DELETED
+			}
+			/* step: send the event upstream via the channel */
+			r.channel <- event
+			return
+		}
+	}
+	glog.V(VERBOSE_LEVEL).Infof("The key: %s is presently not being watched, we can ignore for now")
 }
 
 func (r *EtcdStoreClient) CreateNode(response *etcd.Node) *Node {
@@ -189,18 +271,4 @@ func (r *EtcdStoreClient) CreateNode(response *etcd.Node) *Node {
 		node.Directory = true
 	}
 	return node
-}
-
-func (r *EtcdStoreClient) GetNodeEvent(response *etcd.Response) (event NodeChange) {
-	event.Node.Path = response.Node.Key
-	event.Node.Value = response.Node.Value
-	event.Node.Directory = response.Node.Dir
-	switch response.Action {
-	case "set":
-		event.Operation = CHANGED
-	case "delete":
-		event.Operation = DELETED
-	}
-	glog.V(VERBOSE_LEVEL).Infof("GetNodeEvent() event: %s", event)
-	return
 }

@@ -88,17 +88,18 @@ type ConfigurationStore struct {
 func NewConfigurationStore() (Store, error) {
 	glog.Infof("Creating a new configuration store, mountpoint: '%s'")
 	/* step: we create the kv store */
-	if kvstore, err := kv.NewKVStore(); err != nil {
+	service := new(ConfigurationStore)
+	/* create the channel for k/v notifications */
+	service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
+
+	if kvstore, err := kv.NewKVStore(service.nodeEventChannel); err != nil {
 		glog.Errorf("Failed to create the K/V Store, error: %s", err)
 		return nil, err
 	} else {
-		/* step; create the configuration store */
-		service := new(ConfigurationStore)
 		service.fs = fs.NewStoreFS()
 		service.kv = kvstore
 		service.dynamic = dynamic.NewDynamicStore(DEFAULT_DYNAMIC_PREFIX, kvstore)
 		service.shutdownChannel = make(chan bool, 1)
-		service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
 		service.dynamicEventChannel = make(dynamic.DynamicUpdateChannel, 10)
 		service.filesystemEventChannel = make(WatchServiceChannel, 10)
 		service.timerEventChannel = time.NewTicker(time.Duration(*refresh_interval) * time.Second)
@@ -148,10 +149,7 @@ func (r *ConfigurationStore) Synchronize() error {
 	*/
 	go func() {
 		/* step: add a watch on the K/V store for the root directory - i.e. watch for ALL changes */
-		if _, err := r.kv.Watch("/", r.nodeEventChannel); err != nil {
-			glog.Errorf("Failed to add watch to root directory, error: %s", err)
-			return
-		}
+		r.kv.Watch("/")
 
 		/* step: enter into the main event loop */
 		for {
