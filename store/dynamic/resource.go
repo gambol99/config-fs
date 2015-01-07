@@ -198,7 +198,7 @@ func (r *DynamicConfig) FindEndpoints(service string) []string {
 	list := make([]string,0)
 	/* step: find some endpoints */
 	for _, endpoint := range r.FindService(service) {
-		list = append(list, fmt.Sprintf("%s:%s", endpoint.Address, endpoint.Port))
+		list = append(list, fmt.Sprintf("%s:%d", endpoint.Address, endpoint.Port))
 	}
 	return list
 }
