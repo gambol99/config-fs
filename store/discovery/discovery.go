@@ -62,7 +62,7 @@ type Discovery interface {
 func NewDiscovery(channel ServiceUpdateChannel) (Discovery, error) {
 	/* step: if the discovery url is not set, we can return a dummy provider */
 	if *discovery_url == "" {
-		return NewDummyServiceAgent(), nil
+		return nil, nil
 	} else {
 		if uri, err := url.Parse(*discovery_url); err != nil {
 			glog.Errorf("Failed to parse the discovery url: %s, error: %s", *discovery_url, err)

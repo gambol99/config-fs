@@ -60,20 +60,19 @@ type KVStore interface {
 }
 
 func NewKVStore(channel NodeUpdateChannel) (KVStore, error) {
-	glog.Infof("Creating a new configuration provider: %s", *kv_store_url)
-	/* step: parse the url */
+	glog.Infof("Creating a new kv provider: %s", *kv_store_url)
 	if uri, err := url.Parse(*kv_store_url); err != nil {
 		glog.Errorf("Failed to parse the url: %s, error: %s", *kv_store_url, err)
 		return nil, err
 	} else {
 		switch uri.Scheme {
 		case "etcd":
-			agent, err := NewEtcdStoreClient(uri, channel)
-			if err != nil {
-				glog.Errorf("Failed to create the K/V agent, error: %s", err)
+			if agent, err := NewEtcdStoreClient(uri, channel); err != nil {
+				glog.Errorf("Failed to create the K/V provider: %s, error: %s", *kv_store_url, err)
 				return nil, err
+			} else {
+				return agent, nil
 			}
-			return agent, nil
 		default:
 			return nil, errors.New("Unsupported key/value store: " + *kv_store_url)
 		}
