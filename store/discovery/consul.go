@@ -22,7 +22,7 @@ import (
 	"github.com/golang/glog"
 )
 
-const DEFAULT_WAIT_TIME = 180
+const DEFAULT_WAIT_TIME = 10
 
 type ConsulServiceAgent struct {
 	sync.Mutex
@@ -54,6 +54,8 @@ func NewConsulServiceAgent(uri *url.URL, channel ServiceUpdateChannel) (Discover
 }
 
 func (r *ConsulServiceAgent) Close() error {
+	r.Lock()
+	defer r.Unlock()
 	/* step: we iterate the watches and send a shutdown signal to end the goroutine */
 	for service, channel := range r.watchedServices {
 		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service)
@@ -90,7 +92,7 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 	glog.V(VERBOSE_LEVEL).Infof("WatchService() adding a watch for changes to service: %s", service)
 
 	/* step: we create a stop channel which is used by the goroutine below */
-	shutdownChannel := make(chan bool, 1)
+	shutdownChannel := make(chan bool)
 	r.watchedServices[service] = shutdownChannel
 
 	go func() {
@@ -119,7 +121,7 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 				}
 			}
 			/* step: build the query - make sure we have a timeout */
-			queryOptions := &consulapi.QueryOptions{WaitIndex: r.waitIndex, WaitTime: DEFAULT_WAIT_TIME}
+			queryOptions := &consulapi.QueryOptions{WaitIndex: r.waitIndex, WaitTime: DEFAULT_WAIT_TIME * time.Second }
 
 			/* step: making a blocking watch call for changes on the service */
 			_, meta, err := catalog.Service(service, "", queryOptions)

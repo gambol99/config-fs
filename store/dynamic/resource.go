@@ -69,7 +69,7 @@ func NewDynamicResource(filename, content string) (DynamicResource, error) {
 		return nil, err
 	} else {
 		config.store = agent
-		config.stopChannel = make(chan bool, 0)
+		config.stopChannel = make(chan bool)
 		config.serviceUpdateChannel = make(discovery.ServiceUpdateChannel, 5)
 		/* step: create a discovery agent */
 		if disx, err := discovery.NewDiscovery(config.serviceUpdateChannel); err != nil {
@@ -108,6 +108,31 @@ func (r DynamicConfig) Close() {
 	r.stopChannel <- true
 }
 
+func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
+	r.stopChannel = make(chan bool)
+	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the dynamic config: %s, channel: %v", r.path, channel)
+	go func() {
+		for {
+			select {
+			case event := <-r.storeUpdateChannel:
+				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, event)
+				if err := r.Generate(); err == nil {
+					channel <- r.path
+				}
+			case service := <-r.serviceUpdateChannel:
+				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, service)
+				if err := r.Generate(); err == nil {
+					channel <- r.path
+				}
+			case <-r.stopChannel:
+				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
+				r.discovery.Close()
+				r.store.Close()
+			}
+		}
+	}()
+}
+
 func (r *DynamicConfig) Content(forceRefresh bool) (string, error) {
 	/* step: get the content from the cache if there and refresh is false */
 	if r.content != "" && forceRefresh == false {
@@ -141,31 +166,6 @@ func (r *DynamicConfig) Render() (string, error) {
 		return "", err
 	}
 	return content.String()[len(DYNAMIC_PREFIX):], nil
-}
-
-func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
-	r.stopChannel = make(chan bool)
-	glog.V(VERBOSE_LEVEL).Infof("Adding a listener for the dynamic config: %s, channel: %v", r.path, channel)
-	go func() {
-		for {
-			select {
-			case event := <-r.storeUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, event)
-				if err := r.Generate(); err == nil {
-					channel <- r.path
-				}
-			case service := <-r.serviceUpdateChannel:
-				glog.V(VERBOSE_LEVEL).Infof("Dynamic config: %s, event: %s", r.path, service)
-				if err := r.Generate(); err == nil {
-					channel <- r.path
-				}
-			case <-r.stopChannel:
-				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
-				r.discovery.Close()
-				r.store.Close()
-			}
-		}
-	}()
 }
 
 /* Dynamic Config templating functions */
