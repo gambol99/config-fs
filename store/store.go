@@ -93,7 +93,7 @@ func NewConfigurationStore() (Store, error) {
 	service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
 
 	if kvstore, err := kv.NewKVStore(service.nodeEventChannel); err != nil {
-		glog.Errorf("Failed to create the K/V Store, error: %s", err)
+		glog.Fatalf("Failed to create the K/V Store, error: %s", err)
 		return nil, err
 	} else {
 		service.fs = fs.NewStoreFS()

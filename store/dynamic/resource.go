@@ -39,7 +39,7 @@ type DynamicResource interface {
 }
 
 type DynamicConfig struct {
-	sync.Mutex
+	sync.RWMutex
 	/* the path of the file */
 	path string
 	/* the actual template */
@@ -221,11 +221,6 @@ func (r *DynamicConfig) ListDirectory(directory string) ([]string, error) {
 	}
 }
 
-func (r *DynamicConfig) Exists(key string) bool {
-
-	return false
-}
-
 func (r *DynamicConfig) GetKeyPair(key string) (kv.Node, error) {
 	if node, err := r.store.Get(key); err != nil {
 		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
@@ -233,10 +228,6 @@ func (r *DynamicConfig) GetKeyPair(key string) (kv.Node, error) {
 	} else {
 		return *node, nil
 	}
-}
-
-func (r DynamicConfig) GetKeysPairs(key string) ([]kv.Node, error) {
-	return nil, errors.New("Method not supported yet")
 }
 
 func (r *DynamicConfig) GetValue(key string) string {
@@ -251,10 +242,10 @@ func (r *DynamicConfig) GetValue(key string) string {
 	}
 }
 
-func (r *DynamicConfig) GetList(path string) []string {
+func (r *DynamicConfig) GetList(path string) ([]string,error) {
 	if paths, err := r.store.List(path); err != nil {
 		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
-		return make([]string, 0)
+		return nil, err
 	} else {
 		list := make([]string, 0)
 		for _, node := range paths {
@@ -262,7 +253,7 @@ func (r *DynamicConfig) GetList(path string) []string {
 				list = append(list, node.Path)
 			}
 		}
-		return list
+		return list, nil
 	}
 }
 
