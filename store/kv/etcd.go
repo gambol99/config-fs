@@ -37,6 +37,8 @@ type EtcdStoreClient struct {
 	client *etcd.Client
 	/* stop channel for the client */
 	stopChannel chan bool
+	/* stop channel for reciever */
+	stopRecieverChannel chan bool
 	/* the update channel we send our changes to */
 	channel NodeUpdateChannel
 	/* a map of keys presently being watched */
@@ -195,14 +197,12 @@ func (r *EtcdStoreClient) WatchEvents() {
 		/* the kill switch */
 		kill_off := false
 
-		reciever_stop_channel := make(chan bool)
-
 		go func() {
 			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.baseKey)
 			/* step: wait for the shutdown signal to the k/v agent */
 			<-r.stopChannel
 			/* step: send the signal to any watches */
-			reciever_stop_channel <- true
+			r.stopRecieverChannel <- true
 			kill_off = true
 		}()
 
@@ -210,6 +210,7 @@ func (r *EtcdStoreClient) WatchEvents() {
 		for {
 			/* step: we create a reciever for node events  */
 			reciever_channel := make(chan *etcd.Response)
+			r.stopRecieverChannel = make(chan bool)
 
 			/* step: gorountine to handle the kv changes */
 			go func() {
@@ -228,7 +229,7 @@ func (r *EtcdStoreClient) WatchEvents() {
 			}
 
 			/* step: apply a watch on the key and wait - the receiver channel is used to handle the events */
-			_, err := r.client.Watch(r.baseKey, uint64(0), true, reciever_channel, reciever_stop_channel)
+			_, err := r.client.Watch(r.baseKey, uint64(0), true, reciever_channel, r.stopRecieverChannel)
 			if err != nil {
 				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
 				time.Sleep(3 * time.Second)
