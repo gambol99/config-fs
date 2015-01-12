@@ -51,6 +51,8 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 	store.uri = location.String()
 	store.channel = channel
 	store.watchedKeys = make(map[string]bool, 0)
+	store.stopChannel = make(chan bool)
+
 	for _, host := range strings.Split(location.Host, ",") {
 		store.hosts = append(store.hosts, "http://"+host)
 	}
@@ -189,34 +191,47 @@ func (r *EtcdStoreClient) Watch(key string) {
 
 func (r *EtcdStoreClient) WatchEvents() {
 	glog.V(VERBOSE_LEVEL).Infof("Starting the event handler for etcd client")
-
-	/* step: we create a stop channel and add the key */
-	r.stopChannel = make(chan bool)
 	go func() {
-		killOffWatch := false
+		/* the kill switch */
+		kill_off := false
+
+		/* step: we create a reciever for node events  */
+		reciever_channel := make(chan *etcd.Response)
+		reciever_stop_channel := make(chan bool)
+
 		go func() {
-			/* step: wait for the shutdown signal */
-			<-r.stopChannel
 			glog.V(VERBOSE_LEVEL).Infof("Killing off the watcher in base: %s", r.baseKey)
-			killOffWatch = true
+			/* step: wait for the shutdown signal to the k/v agent */
+			<-r.stopChannel
+			/* step: send the signal to any watches */
+			reciever_stop_channel <- true
+			kill_off = true
 		}()
+
+		/* step: gorountine to handle the kv changes */
+		go func() {
+			glog.V(VERBOSE_LEVEL).Infof("Starting to listen to changes to the K/V store")
+			for change := range reciever_channel {
+				/* step: cool - we have a notification - lets check if this key is being watched */
+				go r.ProcessNodeChange(change)
+			}
+			glog.V(VERBOSE_LEVEL).Infof("Killing off the channel reciever for the watch")
+		}()
+
+		/* step: start listening to events */
 		for {
-			if killOffWatch {
+			/* step: check if we need to break out */
+			if kill_off {
+				glog.V(VERBOSE_LEVEL).Infof("Shutting down watching events for kv agent, channel: %v", r.channel )
 				break
 			}
-			/* step: apply a watch on the key and wait */
-			response, err := r.client.Watch(r.baseKey, uint64(0), true, nil, r.stopChannel)
+
+			/* step: apply a watch on the key and wait - the receiver channel is used to handle the events */
+			_, err := r.client.Watch(r.baseKey, uint64(0), true, reciever_channel, reciever_stop_channel)
 			if err != nil {
 				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
 				time.Sleep(3 * time.Second)
-				continue
 			}
-			/* step: have we been requested to quit */
-			if killOffWatch {
-				continue
-			}
-			/* step: cool - we have a notification - lets check if this key is being watched */
-			go r.ProcessNodeChange(response)
 		}
 	}()
 }
