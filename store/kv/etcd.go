@@ -195,8 +195,6 @@ func (r *EtcdStoreClient) WatchEvents() {
 		/* the kill switch */
 		kill_off := false
 
-		/* step: we create a reciever for node events  */
-		reciever_channel := make(chan *etcd.Response)
 		reciever_stop_channel := make(chan bool)
 
 		go func() {
@@ -208,18 +206,21 @@ func (r *EtcdStoreClient) WatchEvents() {
 			kill_off = true
 		}()
 
-		/* step: gorountine to handle the kv changes */
-		go func() {
-			glog.V(VERBOSE_LEVEL).Infof("Starting to listen to changes to the K/V store")
-			for change := range reciever_channel {
-				/* step: cool - we have a notification - lets check if this key is being watched */
-				go r.ProcessNodeChange(change)
-			}
-			glog.V(VERBOSE_LEVEL).Infof("Killing off the channel reciever for the watch")
-		}()
-
 		/* step: start listening to events */
 		for {
+			/* step: we create a reciever for node events  */
+			reciever_channel := make(chan *etcd.Response)
+
+			/* step: gorountine to handle the kv changes */
+			go func() {
+				glog.V(VERBOSE_LEVEL).Infof("Starting to listen to changes to the K/V store")
+				for change := range reciever_channel {
+					/* step: cool - we have a notification - lets check if this key is being watched */
+					go r.ProcessNodeChange(change)
+				}
+				glog.V(VERBOSE_LEVEL).Infof("Killing off the channel reciever for the watch")
+			}()
+
 			/* step: check if we need to break out */
 			if kill_off {
 				glog.V(VERBOSE_LEVEL).Infof("Shutting down watching events for kv agent, channel: %v", r.channel )
