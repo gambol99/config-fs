@@ -192,14 +192,13 @@ func (r *EtcdStoreClient) Watch(key string) {
 }
 
 func (r *EtcdStoreClient) WatchEvents() {
-	glog.V(VERBOSE_LEVEL).Infof("Starting the event handler for etcd client")
-	/* step: we create a stop channel and add the key */
-	r.stopChannel = make(chan bool)
+	glog.V(VERBOSE_LEVEL).Infof("Starting the event watcher for the etcd clinet, channel: %v", r.channel)
 	/* the kill switch for the goroutine */
 	kill_off := false
 
 	/* routine: waits on the shutdown signal for the client and flicks the kill switch */
 	go func() {
+		glog.V(VERBOSE_LEVEL).Infof("Waiting on a shutdown signal from consumer, channel: %v", r.channel)
 		/* step: wait for the shutdown signal */
 		<-r.stopChannel
 		/* @perhaps : we could speed up the take down by using a stop channel on the watch? */
@@ -212,7 +211,10 @@ func (r *EtcdStoreClient) WatchEvents() {
 		/* step: set the index to zero for now */
 		wait_index := uint64(0)
 		/* step: look until we hit the kill switch */
-		for kill_off {
+		for {
+			if kill_off {
+				break
+			}
 			/* step: apply a watch on the key and wait */
 			response, err := r.client.Watch(r.baseKey, wait_index, true, nil, nil)
 			if err != nil {
@@ -246,7 +248,6 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 	for watch_key, _ := range r.watchedKeys {
 		if strings.HasPrefix(path, watch_key) {
 			glog.V(VERBOSE_LEVEL).Infof("Sending notification of change on key: %s, channel: %v, event: %v", path, r.channel, response)
-
 			/* step: we create an event and send upstream */
 			var event NodeChange
 			event.Node.Path = response.Node.Key
@@ -258,7 +259,6 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 			case "delete":
 				event.Operation = DELETED
 			}
-
 			/* step: send the event upstream via the channel */
 			r.channel <- event
 			return
