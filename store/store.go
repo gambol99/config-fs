@@ -29,6 +29,7 @@ import (
 
 const (
 	DEFAULT_MOUNT_POINT    = "/config"
+	DEFAULT_ROOT_KEY       = "/"
 	DEFAULT_DELETE_ON_EXIT = false
 	DEFAULT_PRE_SYNC       = true
 	DEFAULT_READ_ONLY      = true
@@ -52,9 +53,12 @@ var options struct {
 	sync_on_startup bool
 	/* delete stale files - delete any files NOT in the k/v store */
 	delete_stale_files bool
-}
+	/* the root for the configuration store */
+	root_key string
+	}
 
 func init() {
+	flag.StringVar(&options.root_key,"root", DEFAULT_ROOT_KEY, "the root within the k/v store to base the config on")
 	flag.StringVar(&options.cfg_directory, "mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
 	flag.BoolVar(&options.delete_on_exit, "delete_on_exit", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	flag.IntVar(&options.refresh_interval, "interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
@@ -128,6 +132,8 @@ func (r *ConfigurationStore) Close() {
 
 /* Synchronize the key/value store with the configuration directory */
 func (r *ConfigurationStore) Synchronize() error {
+	glog.Infof("Starting the sychronization between root: %s, mount: %s, store: %s", options.root_key,
+		options.cfg_directory, r.kv.URL())
 
 	/* step: if the base directory does not exists, we try and create it */
 	if r.fs.IsDirectory(options.cfg_directory) == false {
@@ -137,10 +143,9 @@ func (r *ConfigurationStore) Synchronize() error {
 			return err
 		}
 	}
-
 	/* step: perform a one-time build of the configuration store */
 	if options.sync_on_startup {
-		glog.Infof("Starting the sychronization between mount: %s and store: %s", options.cfg_directory, r.kv.URL())
+		glog.Infof("Perform a initial presync of the confiuration directory")
 		if err := r.BuildFileSystem(); err != nil {
 			glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 			return err
@@ -159,7 +164,7 @@ func (r *ConfigurationStore) Synchronize() error {
 	*/
 	go func() {
 		/* step: add a watch on the K/V store for the root directory - i.e. watch for ALL changes */
-		r.kv.Watch("/")
+		r.kv.Watch(options.root_key)
 
 		/* step: enter into the main event loop */
 		for {
@@ -390,7 +395,7 @@ func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
 
 func (r *ConfigurationStore) BuildFileSystem() error {
 	glog.Infof("Building the file system from k/v stote at: %s", options.cfg_directory)
-	r.BuildDirectory("/")
+	r.BuildDirectory(options.root_key)
 	return nil
 }
 
@@ -424,7 +429,7 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			case node.IsDir():
 				if r.fs.Exists(full_path) == false {
 					glog.V(VERBOSE_LEVEL).Infof("BuildDiectory() creating directory item: %s", full_path)
-					r.fs.Mkdir(full_path)
+					r.fs.Mkdirp(full_path)
 				}
 				/* go recursive and build the contents of that directory */
 				if err := r.BuildDirectory(node.Path); err != nil {
