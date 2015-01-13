@@ -121,7 +121,7 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 				}
 			}
 			/* step: build the query - make sure we have a timeout */
-			queryOptions := &consulapi.QueryOptions{WaitIndex: r.waitIndex, WaitTime: DEFAULT_WAIT_TIME * time.Second }
+			queryOptions := &consulapi.QueryOptions{WaitIndex: r.waitIndex, WaitTime: DEFAULT_WAIT_TIME * time.Second}
 
 			/* step: making a blocking watch call for changes on the service */
 			_, meta, err := catalog.Service(service, "", queryOptions)

@@ -242,7 +242,7 @@ func (r *DynamicConfig) GetValue(key string) string {
 	}
 }
 
-func (r *DynamicConfig) GetList(path string) ([]string,error) {
+func (r *DynamicConfig) GetList(path string) ([]string, error) {
 	if paths, err := r.store.List(path); err != nil {
 		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
 		return nil, err
