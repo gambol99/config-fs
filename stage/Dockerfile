@@ -9,7 +9,9 @@ MAINTAINER <gambol99@gmail.com>
 
 ADD startup.sh ./startup.sh
 RUN opkg-install curl
-RUN curl -ksL https://drone.io/github.com/gambol99/config-fs/files/config-fs.gz | gunzip - > /bin/config-fs
+RUN curl -ksL https://drone.io/github.com/gambol99/config-fs/files/config-fs.gz > /bin/config-fs.gz
+RUN md5sum /bin/config-fs.gz
+RUN gunzip /bin/config-fs.gz
 RUN chmod +x /startup.sh; chmod +x /bin/config-fs
 
 ENTRYPOINT [ "/startup.sh" ]
