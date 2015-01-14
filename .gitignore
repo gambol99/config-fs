@@ -3,6 +3,7 @@ config-fs.iml
 stage/config-fs
 config-fs
 changelog
+release/
 .idea/
 logs/
 mount/

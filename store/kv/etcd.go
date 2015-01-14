@@ -220,6 +220,8 @@ func (r *EtcdStoreClient) WatchEvents() {
 			if err != nil {
 				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
 				time.Sleep(3 * time.Second)
+				/* step: reset the wait index for good measure */
+				wait_index = uint64(0)
 				continue
 			}
 			/* step: have we been requested to quit */
