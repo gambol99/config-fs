@@ -5,6 +5,13 @@
 
 Config-fs is a key/value backed configuration file system. The daemon process synchronizes the content found in K/V store, converting the keys into files / directories and so forth. Naturally any changes which are made at the K/V end are propagated downstream to the config file system.
 
+Current Status
+------
+
+ - Replication of the K/V store to the configuration directory is working
+ - The watcher service needs to be completed and integrated - thus allowing for write access to the backend (though not a priority at the moment)
+ - The dynamic resources work, but requires a code clean up, a review and no doubt a number of bug fixes
+
 ## Dynamic Config ##
 Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "\$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
 
