@@ -46,7 +46,31 @@ Dynamic config works in a similar vain to [confd](https://github.com/kelseyhight
 
 ### {{ service "frontend_http" }}
 
-The method is used to perform a lookup on a service discovery provider (at present I'm using "consul"). The function will respond with an array of endpoints; Note, every time a service "name' is used within a template a watch is automatically placed on the service, with any changes to the endpoints throwing a notification to the store and regenerating the content
+The method search the discovery provider for a service, returning the following struct
+
+    type Service struct {
+    	/* the descriptive for the service */
+    	Name string
+    	/* the tags associated to the service */
+    	Tags []string
+    }
+
+    {{ $service := service "frontend_http" }}
+    {{ $service.Tags }}
+
+### {{ services }}
+
+Returns a array of all services from the discovery provider
+
+    {{ range services }}
+    Name: {{ .Name }}, Tags: {{ print "," | join .Tags }}
+    {{ end }}
+
+### {{ endpoints "frontend_http" }}
+
+Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints in the service request.
+
+    The struct returned
 
     type Endpoint struct {
       ID string
@@ -58,24 +82,59 @@ The method is used to perform a lookup on a service discovery provider (at prese
       Port int
     }
 
-    {{range service "frontend_http"}}  server {{.Address}}_{{.Port}} {{.Address}}:{{.Port}}{{printf "\n"}}{{end}}
-    # Producing something like;
+    {{ range getl "/services/frontends/" }}
+    frontend {{ base .Path }}
+      bind *: {{ getv "/services/frontend/port" }}
+      mode http
+      default_backend {{ base .Path }}
+
+    backend {{ base .Path }}
+      mode http
+      balance roundrobin
+      option forwardfor
+      http-request set-header X-Forwarded-Port %[dst_port]
+      http-request add-header X-Forwarded-Proto https if { ssl_fc }
+    {{ range service .Path }}  server {{.Address}}_{{.Port}} {{.Address}}:{{.Port}}{{printf "\n"}}{{end}}
+    {{ end }}
+
+    or
+
+    {{range endpoints "frontend_http"}}  server {{.Address}}_{{.Port}} {{.Address}}:{{.Port}}{{printf "\n"}}{{end}}
+    # Producing something like
     server 10.241.1.75_31002 10.241.1.75:31002
     server 10.241.1.75_31001 10.241.1.75:31001
 
-### {{ endpoints "frontend_http" }}
+### {{ endpointsl "frontend_http" }}
 
-Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints in the service request.
+A helper method for the one above, it simply hands back the endpoints as a array of strings
 
 	{{$services := endpoints "frontend_http"}}
 	services: {{join $services ","}}
 
-## {{ get "/this/is/a/key/im/interested/in" }}
+### {{ get "/this/is/a/key/im/interested/in" }}
 
 The Get() method is used to retrieve and watch a key/pair with in the K/V store.
 
+    type Node struct {
+        /* the path for this key */
+        Path string
+        /* the value of the key */
+        Value string
+        /* the type of node it is, directory or file */
+        Directory bool
+    }
+
     {{$node := get "/prod/config/database/password" }}
     {{$node.Path}} {{$node.Value}}
+
+### {{ gets "/this/is/a/key/im/interested/in" }}
+
+Returns an array of keypairs - essentially a list of children (files/directories) under the path
+
+    {{ range gets "/services/http/frontends" }}
+    {{ service
+
+    {{ end }}
 
 ### {{ getv "/this/is/a/key/im/interested/in" }}
 
@@ -88,17 +147,18 @@ The GetValue() method is used to retrieve 'value' of a key with in the K/V store
 
 The GetList() method is used to produce an aray of child keys (excluding directories) under the path specified.
 
-    type Entry struct {
-      /* the path of the node */
-      Path string
-      /* the value of the node */
-      Value string
-    }
-
 Lets just assume for some incredible reason we are using the directory /prod/config/zookeeper to keep a list of zookeepers ... i.e. /prod/config/zookeeper/zoo101 => 10.241.1.100, /prod/config/zookeeper/zoo102 => 10.241.1.101 etc.
 
     {{range getr "/prod/config/zookeeper"}}
     server {{.Value}}{{end}
+
+### contained
+
+Checks to see if a value is inside an array i.e. check if a tag is present in a service
+
+    {{ if "haproxy" | contained .Tags }}
+    Not really a fan of this pipeline thing ... give me ERB any day
+    {{end}}
 
 ### json
 

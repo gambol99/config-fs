@@ -126,8 +126,13 @@ func (r *EtcdStoreClient) URL() string {
 }
 
 func (r *EtcdStoreClient) ValidateKey(key string) string {
+	/* step: if it doesnt start with a / - add it */
 	if !strings.HasPrefix(key, "/") {
 		key = "/" + key
+	}
+	/* step: if it ends with a slash, remove it */
+	if len(key) > 1 && strings.HasSuffix(key, "/")  {
+		key = key[:len(key)-1]
 	}
 	return key
 }
@@ -266,7 +271,7 @@ func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
 			return
 		}
 	}
-	glog.V(VERBOSE_LEVEL).Infof("The key: %s is presently not being watched, we can ignore for now")
+	glog.V(VERBOSE_LEVEL).Infof("The key: %s is presently not being watched, we can ignore for now", path )
 }
 
 func (r *EtcdStoreClient) CreateNode(response *etcd.Node) *Node {
