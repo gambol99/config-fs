@@ -16,7 +16,6 @@ package discovery
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"net/url"
 
 	"github.com/golang/glog"
@@ -35,26 +34,17 @@ func init() {
 
 type ServiceUpdateChannel chan string
 
-type Endpoint struct {
-	ID string
-	/* the name of the service */
-	Name string
-	/* the ip address of the service */
-	Address string
-	/* the port the service is running on */
-	Port int
-}
-
-func (s Endpoint) String() string {
-	return fmt.Sprintf("id: %s, name: %s, address: %s:%d", s.ID, s.Name, s.Address, s.Port)
-}
 
 /* The Discovery service is a binding between X service discovery providers (i.e. consul, skydns, discoverd etc) */
 type Discovery interface {
+	/* Get a service from discovery */
+	Service(service string) (Service,error)
+	/* Get a list of the services */
+	Services() ([]Service, error)
 	/* Retrieve a list of endpoints for a service */
-	ListEndpoints(service string) ([]Endpoint, error)
+	Endpoints(service string) ([]Endpoint, error)
 	/* Watch for changes on a service and report back */
-	WatchService(service string) error
+	Watch(service string) error
 	/* Close the service down */
 	Close() error
 }

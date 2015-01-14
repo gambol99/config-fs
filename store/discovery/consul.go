@@ -14,6 +14,7 @@ limitations under the License.
 package discovery
 
 import (
+	"errors"
 	"net/url"
 	"sync"
 	"time"
@@ -64,32 +65,64 @@ func (r *ConsulServiceAgent) Close() error {
 	return nil
 }
 
-func (r *ConsulServiceAgent) ListEndpoints(service string) ([]Endpoint, error) {
-	glog.V(VERBOSE_LEVEL).Infof("ListEndpoints() filter: %s", service)
+func (r *ConsulServiceAgent) Service(name string) (Service,error) {
+	glog.V(VERBOSE_LEVEL).Infof("Service() service: %s", name)
+	if services, err := r.Services(); err != nil {
+		glog.Errorf("Service() failed to find services for service: %s, error: %s", name, err)
+		return Service{}, err
+	} else {
+		for _, service := range services {
+		  	if service.Name == name {
+				return service, nil
+			}
+		}
+	}
+	return Service{}, errors.New("The service: " + name + " does not exist in discovery provider" )
+}
+
+func (r *ConsulServiceAgent) Services() ([]Service, error) {
+	glog.V(VERBOSE_LEVEL).Infof("Services()")
+	catalog := r.client.Catalog()
+	if list, _, err := catalog.Services(&consulapi.QueryOptions{}); err != nil {
+		glog.Errorf("Services() failed to find services error: %s", err)
+		/* step: just return an empty list */
+		return make([]Service, 0), nil
+	} else {
+		services := make([]Service, 0)
+		for name, tags := range list {
+			services = append(services, Service{name,tags} )
+		}
+		return services, nil
+	}
+}
+
+func (r *ConsulServiceAgent) Endpoints(service string) ([]Endpoint, error) {
+	glog.V(VERBOSE_LEVEL).Infof("Endpoints() filter: %s", service)
 	catalog := r.client.Catalog()
 	if services, _, err := catalog.Service(service, "", &consulapi.QueryOptions{}); err != nil {
-		glog.Errorf("FindService() failed to find services for service: %s, error: %s", service, err)
+		glog.Errorf("Endpoints() failed to find services for service: %s, error: %s", service, err)
 		return nil, err
 	} else {
 		endpoints := make([]Endpoint, 0)
 		for _, service := range services {
-			endpoints = append(endpoints, r.GetService(service))
+			endpoints = append(endpoints, r.GetEndpoint(service))
 		}
+		glog.V(VERBOSE_LEVEL).Infof("Endpoints() service: %s, list: %v", service, endpoints)
 		return endpoints, nil
 	}
 }
 
-func (r *ConsulServiceAgent) WatchService(service string) error {
+func (r *ConsulServiceAgent) Watch(service string) error {
 	r.Lock()
 	defer r.Unlock()
 
 	/* step: check if the resource is already being monitored */
 	if _, found := r.watchedServices[service]; found {
-		glog.V(VERBOSE_LEVEL).Infof("The service %s is already being watched by this agent, skipping", service)
+		glog.V(VERBOSE_LEVEL).Infof("Watch() the service %s is already being watched by this agent, skipping", service)
 		return nil
 	}
 
-	glog.V(VERBOSE_LEVEL).Infof("WatchService() adding a watch for changes to service: %s", service)
+	glog.V(VERBOSE_LEVEL).Infof("Watch() adding a watch for changes to service: %s", service)
 
 	/* step: we create a stop channel which is used by the goroutine below */
 	shutdownChannel := make(chan bool)
@@ -106,14 +139,14 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 		}()
 		for {
 			if killOff {
-				glog.V(3).Infof("WatchServices() shutting down watch on service: %s", service)
+				glog.V(3).Infof("Watch() shutting down watch on service: %s", service)
 				break
 			}
 			if r.waitIndex == 0 {
 				/* step: lets get the wait index */
 				_, meta, err := catalog.Service(service, "", &consulapi.QueryOptions{})
 				if err != nil {
-					glog.Errorf("WatchServices() failed to grab the service: %s fron consul, error: %s", service, err)
+					glog.Errorf("Watch() failed to grab the service: %s fron consul, error: %s", service, err)
 					time.Sleep(5 * time.Second)
 				} else {
 					/* update the wait index for this service */
@@ -140,7 +173,7 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 				/* step: update the index */
 				r.waitIndex = meta.LastIndex
 				/* step: send the update upstream */
-				glog.V(VERBOSE_LEVEL).Infof("WatchService() service: %s changes; sending upstream", service)
+				glog.V(VERBOSE_LEVEL).Infof("Watch() service: %s changes; sending upstream", service)
 				r.updateChannel <- service
 			}
 		}
@@ -148,7 +181,7 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 	return nil
 }
 
-func (r *ConsulServiceAgent) GetService(svc *consulapi.CatalogService) Endpoint {
+func (r *ConsulServiceAgent) GetEndpoint(svc *consulapi.CatalogService) Endpoint {
 	var endpoint Endpoint
 	endpoint.ID = svc.ServiceID
 	endpoint.Name = svc.ServiceName

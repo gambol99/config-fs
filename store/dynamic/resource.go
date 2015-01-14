@@ -21,8 +21,10 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sort"
 	"sync"
 	"text/template"
+	"reflect"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -79,18 +81,22 @@ func NewDynamicResource(filename, content string) (DynamicResource, error) {
 			config.discovery = disx
 			/* step: create the function map for this template */
 			functionMap := template.FuncMap{
-				"service":   config.FindService,
-				"endpoints": config.FindEndpoints,
-				"get":       config.GetKeyPair,
-				"getv":      config.GetValue,
-				"getr":      config.GetList,
-				"json":      config.UnmarshallJSON,
-				"jsona":     config.UnmarshallJSONArray,
-				"base":      path.Base,
-				"dir":       path.Dir,
-				"split":     strings.Split,
-				"getenv":    os.Getenv,
-				"join":      strings.Join}
+				"service":    config.FindService,
+				"services":   config.FindServices,
+				"endpoints":  config.FindEndpoints,
+				"endpointsl": config.FindEndpointsList,
+				"get":        config.GetKeyPair,
+				"gets":       config.GetKerPairs,
+				"getv":       config.GetValue,
+				"getl":       config.GetList,
+				"json":       config.UnmarshallJSON,
+				"jsona":      config.UnmarshallJSONArray,
+				"contained":  config.Contains,
+				"base":       path.Base,
+				"dir":        path.Dir,
+				"split":      strings.Split,
+				"getenv":     os.Getenv,
+				"join":       strings.Join}
 
 			if resource, err := template.New(filename).Funcs(functionMap).Parse(content); err != nil {
 				glog.Errorf("Failed to parse the dynamic config: %s, error: %s", config.path, err)
@@ -169,55 +175,75 @@ func (r *DynamicConfig) Render() (string, error) {
 }
 
 /* Dynamic Config templating functions */
-func (r *DynamicConfig) FindService(service string) ([]discovery.Endpoint, error) {
+func (r *DynamicConfig) FindService(service string) (discovery.Service, error) {
 	glog.V(VERBOSE_LEVEL).Infof("FindService() service: %s", service)
+	/* step: make sure a discovery service exists */
+	if r.discovery == nil {
+		return discovery.Service{}, errors.New("No service discovery service was specified in config")
+	}
 
+	/* step: we add a watch to the service via the agent, assuming there isn't one already */
+	if err := r.discovery.Watch(service); err != nil {
+		glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
+		return discovery.Service{}, err
+	}
+
+	/* step: we attempt to find the exist, though it might not exist yet */
+	if service, err := r.discovery.Service(service); err != nil {
+		glog.Errorf("Failed to find the service: %s, error: %s", service, err)
+		return discovery.Service{}, nil
+	} else {
+		return service, nil
+	}
+}
+
+func (r *DynamicConfig) FindServices() ([]discovery.Service, error) {
+	glog.V(VERBOSE_LEVEL).Infof("FindServices()")
 	/* step: make sure a discovery service exists */
 	if r.discovery == nil {
 		return nil, errors.New("No service discovery service was specified in config")
 	}
 
-	/* step: we add a watch to the service via the agent, assuming there isn't one already */
-	if err := r.discovery.WatchService(service); err != nil {
-		glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
-		return make([]discovery.Endpoint, 0), nil
+	/* step: get a list of services */
+	services, err := r.discovery.Services()
+	if err != nil {
+		glog.Errorf("Failed to retrieve a list of services from discovery provider, error: %s", err)
+		return nil, err
 	}
-	/* step: we retrieve a list of the endpoints from the agent */
-	if list, err := r.discovery.ListEndpoints(service); err != nil {
-		glog.Errorf("Failed to retrieve a list of services for service: %s, error: %s", service, err)
-		return make([]discovery.Endpoint, 0), nil
-	} else {
-		glog.V(VERBOSE_LEVEL).Infof("Found %d endpoints for service: %s, dynamic config: %s, endpoints: %s", len(list), service, r.path, list)
-		return list, nil
-	}
+
+	/* step: return the services */
+	return services, nil
 }
 
-func (r *DynamicConfig) FindEndpoints(service string) ([]string, error) {
+func (r *DynamicConfig) FindEndpoints(service string) ([]discovery.Endpoint, error) {
 	glog.V(VERBOSE_LEVEL).Infof("FindEndpoints() service: %s", service)
-	/* step: a list of endpoints <address>:<port> */
-	list := make([]string, 0)
+
+	/* step: we add a watch to the service via the agent, assuming there isn't one already */
+	if err := r.discovery.Watch(service); err != nil {
+		glog.Errorf("Failed to add a watch for service: %s, error: %s", service, err)
+		return nil, err
+	}
+
 	/* step: find some endpoints */
-	if endpoints, err := r.FindService(service); err != nil {
+	if endpoints, err := r.discovery.Endpoints(service); err != nil {
 		glog.Errorf("Failed to find service: %s, error: %s", service, err)
 		return nil, err
 	} else {
+		return endpoints, nil
+	}
+}
+
+func (r *DynamicConfig) FindEndpointsList(service string) ([]string, error) {
+	glog.V(VERBOSE_LEVEL).Infof("FindEndpointsList() service: %s", service)
+	if endpoints, err := r.FindEndpoints(service); err != nil {
+		glog.Errorf("Failed to find service: %s, error: %s", service, err)
+		return nil, err
+	} else {
+		list := make([]string, 0)
 		for _, endpoint := range endpoints {
 			list = append(list, fmt.Sprintf("%s:%d", endpoint.Address, endpoint.Port))
 		}
 		return list, nil
-	}
-}
-
-func (r *DynamicConfig) ListDirectory(directory string) ([]string, error) {
-	paths := make([]string, 0)
-	if paths, err := r.store.Paths(directory, &paths); err != nil {
-		glog.Errorf("Failed to generate list of keys under directory: %s", directory)
-		return paths, err
-	} else {
-		/* step: we place a watch on the directory */
-		r.store.Watch(directory)
-		/* step: we get the paths */
-		return paths, nil
 	}
 }
 
@@ -242,19 +268,46 @@ func (r *DynamicConfig) GetValue(key string) string {
 	}
 }
 
+func (r *DynamicConfig) GetKerPairs(path string) ([]*kv.Node, error) {
+	if paths, err := r.store.List(path); err != nil {
+		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
+		return nil, err
+	} else {
+		/* step: we add a watch on the directory */
+		r.store.Watch(path)
+		/* step: return the result */
+		return paths, nil
+	}
+}
+
 func (r *DynamicConfig) GetList(path string) ([]string, error) {
 	if paths, err := r.store.List(path); err != nil {
 		glog.Errorf("Failed to get a list of keys under directory: %s, error: %s", path, err)
 		return nil, err
 	} else {
+		/* step: we add a watch on the directory */
+		r.store.Watch(path)
+		/* step: compose the list of strings */
 		list := make([]string, 0)
 		for _, node := range paths {
 			if node.IsFile() {
 				list = append(list, node.Path)
 			}
 		}
+		/* step: we sort the strings */
+		sort.Strings(list)
 		return list, nil
 	}
+}
+
+func (r *DynamicConfig) Contains(list interface{}, elem interface{}) bool {
+	v := reflect.ValueOf(list)
+	for i := 0; i < v.Len(); i++ {
+		if v.Index(i).Interface() == elem {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *DynamicConfig) UnmarshallJSONArray(content string) ([]interface{}, error) {
