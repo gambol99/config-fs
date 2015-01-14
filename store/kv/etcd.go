@@ -70,13 +70,59 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 	return store, nil
 }
 
-func (r *EtcdStoreClient) URL() string {
-	return r.uri
-}
-
 func (r *EtcdStoreClient) Close() {
 	glog.Infof("Shutting down the etcd client")
 	r.stopChannel <- true
+}
+
+func (r *EtcdStoreClient) WatchEvents() {
+	glog.V(VERBOSE_LEVEL).Infof("Starting the event watcher for the etcd clinet, channel: %v", r.channel)
+	/* the kill switch for the goroutine */
+	kill_off := false
+
+	/* routine: waits on the shutdown signal for the client and flicks the kill switch */
+	go func() {
+		glog.V(VERBOSE_LEVEL).Infof("Waiting on a shutdown signal from consumer, channel: %v", r.channel)
+		/* step: wait for the shutdown signal */
+		<-r.stopChannel
+		/* @perhaps : we could speed up the take down by using a stop channel on the watch? */
+		glog.V(VERBOSE_LEVEL).Infof("Flicking the kill switch for watcher, channel: %v", r.baseKey, r.channel)
+		kill_off = true
+	}()
+
+	/* routine: loops around watching until flick the switch */
+	go func() {
+		/* step: set the index to zero for now */
+		wait_index := uint64(0)
+		/* step: look until we hit the kill switch */
+		for {
+			if kill_off {
+				break
+			}
+			/* step: apply a watch on the key and wait */
+			response, err := r.client.Watch(r.baseKey, wait_index, true, nil, nil)
+			if err != nil {
+				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
+				time.Sleep(3 * time.Second)
+				wait_index = uint64(0)
+				continue
+			}
+			/* step: have we been requested to quit */
+			if kill_off {
+				continue
+			}
+			/* step: update the wait index */
+			wait_index = response.Node.ModifiedIndex + 1
+
+			/* step: cool - we have a notification - lets check if this key is being watched */
+			go r.ProcessNodeChange(response)
+		}
+		glog.V(VERBOSE_LEVEL).Infof("Exitted the k/v watcher routine, channel: %v", r.channel)
+	}()
+}
+
+func (r *EtcdStoreClient) URL() string {
+	return r.uri
 }
 
 func (r *EtcdStoreClient) ValidateKey(key string) string {
@@ -189,52 +235,6 @@ func (r *EtcdStoreClient) Watch(key string) {
 		glog.V(VERBOSE_LEVEL).Infof("Adding a watch on the key: %s", key)
 		r.watchedKeys[key] = true
 	}
-}
-
-func (r *EtcdStoreClient) WatchEvents() {
-	glog.V(VERBOSE_LEVEL).Infof("Starting the event watcher for the etcd clinet, channel: %v", r.channel)
-	/* the kill switch for the goroutine */
-	kill_off := false
-
-	/* routine: waits on the shutdown signal for the client and flicks the kill switch */
-	go func() {
-		glog.V(VERBOSE_LEVEL).Infof("Waiting on a shutdown signal from consumer, channel: %v", r.channel)
-		/* step: wait for the shutdown signal */
-		<-r.stopChannel
-		/* @perhaps : we could speed up the take down by using a stop channel on the watch? */
-		glog.V(VERBOSE_LEVEL).Infof("Flicking the kill switch for watcher, channel: %v", r.baseKey, r.channel)
-		kill_off = true
-	}()
-
-	/* routine: loops around watching until flick the switch */
-	go func() {
-		/* step: set the index to zero for now */
-		wait_index := uint64(0)
-		/* step: look until we hit the kill switch */
-		for {
-			if kill_off {
-				break
-			}
-			/* step: apply a watch on the key and wait */
-			response, err := r.client.Watch(r.baseKey, wait_index, true, nil, nil)
-			if err != nil {
-				glog.Errorf("Failed to attempting to watch the key: %s, error: %s", r.baseKey, err)
-				time.Sleep(3 * time.Second)
-				/* step: reset the wait index for good measure */
-				wait_index = uint64(0)
-				continue
-			}
-			/* step: have we been requested to quit */
-			if kill_off {
-				continue
-			}
-			/* step: update the wait index */
-			wait_index = response.Node.ModifiedIndex + 1
-			/* step: cool - we have a notification - lets check if this key is being watched */
-			go r.ProcessNodeChange(response)
-		}
-		glog.V(VERBOSE_LEVEL).Infof("Exitted the k/v watcher routine, channel: %v", r.channel)
-	}()
 }
 
 func (r *EtcdStoreClient) ProcessNodeChange(response *etcd.Response) {
