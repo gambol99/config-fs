@@ -11,6 +11,7 @@ Current Status
  - Replication of the K/V store to the configuration directory is working
  - The watcher service needs to be completed and integrated - thus allowing for write access to the backend (though not a priority at the moment)
  - The dynamic resources work, but requires a code clean up, a review and no doubt a number of bug fixes
+ - Presently only supports etcd for the K/V store and consul for discovery 
 
 Configuration
 ------
