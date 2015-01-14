@@ -39,11 +39,12 @@ Configuration Root
 
 By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be hide expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
 
+
 ## Dynamic Config ##
+
 Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "\$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
 
-- **Service Method**:
-- **Example**: {{ service "frontend_http" }}
+### {{ service "frontend_http" }}
 
 The method is used to perform a lookup on a service discovery provider (at present I'm using "consul"). The function will respond with an array of endpoints; Note, every time a service "name' is used within a template a watch is automatically placed on the service, with any changes to the endpoints throwing a notification to the store and regenerating the content
 
@@ -57,34 +58,33 @@ The method is used to perform a lookup on a service discovery provider (at prese
       Port int
     }
 
-Usage:
-
-    {{range service .Value}}  server {{.Address}}_{{.Port}} {{.Address}}:{{.Port}}{{printf "\n"}}{{end}}
+    {{range service "frontend_http"}}  server {{.Address}}_{{.Port}} {{.Address}}:{{.Port}}{{printf "\n"}}{{end}}
     # Producing something like;
     server 10.241.1.75_31002 10.241.1.75:31002
+    server 10.241.1.75_31001 10.241.1.75:31001
 
-- **Endpoints Method**:
-- **Example**: {{ endpoints "frontend_http" }}
+### {{ endpoints "frontend_http" }}
 
-Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints in the service request. 
+Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints in the service request.
 
-Usage:
-
-	{{$services := getvs "/services/elasticsearch/*"}}
+	{{$services := endpoints "frontend_http"}}
 	services: {{join $services ","}}
 
-- **GetValue Method:**
-- **Example:** getv "/this/is/a/key/im/interested/in"
+## {{ get "/this/is/a/key/im/interested/in" }}
 
-The GetValue() method is used to retrieve and watch a key with in the K/V store.
+The Get() method is used to retrieve and watch a key/pair with in the K/V store.
 
-Usage:
+    {{$node := get "/prod/config/database/password" }}
+    {{$node.Path}} {{$node.Value}}
+
+### {{ getv "/this/is/a/key/im/interested/in" }}
+
+The GetValue() method is used to retrieve 'value' of a key with in the K/V store.
 
     username: product_user
-    password: {{ getv "/prod/config/db/password"
+    password: {{ getv "/prod/config/db/password" }}
 
--  **GetList Method:**
-- **Example:** getr "/this/is/a/key/im/interested/"
+### {{ getr "/this/is/a/key/im/interested/" }}
 
 The GetList() method is used to produce an aray of child keys (excluding directories) under the path specified.
 
@@ -95,16 +95,23 @@ The GetList() method is used to produce an aray of child keys (excluding directo
       Value string
     }
 
-Usage:
-
 Lets just assume for some incredible reason we are using the directory /prod/config/zookeeper to keep a list of zookeepers ... i.e. /prod/config/zookeeper/zoo101 => 10.241.1.100, /prod/config/zookeeper/zoo102 => 10.241.1.101 etc.
 
     {{range getr "/prod/config/zookeeper"}}
     server {{.Value}}{{end}
 
-**UnmarshallJSON Method:**
-**Example:** getv "some_key | json"
+### json
 
-The json(), a pipeline method, taking the argument previous method and unmarshalling the value.
+Takes a argument, hopefully some json string and unmarshalls string in a map[string]value
 
+### jsona
 
+Takes a json string and unmarshalls string in an array of map[string]value
+
+### Additional (well add example later)
+
+    "base":      path.Base,
+    "dir":       path.Dir,
+    "split":     strings.Split,
+    "getenv":    os.Getenv,
+    "join":      strings.Join}
