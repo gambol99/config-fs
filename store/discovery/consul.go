@@ -135,7 +135,6 @@ func (r *ConsulServiceAgent) WatchService(service string) error {
 				}
 				/* step: if the wait and last index are the same, we can continue */
 				if r.waitIndex == meta.LastIndex {
-					glog.V(VERBOSE_LEVEL).Infof("The WaitIndex and LastIndex are the same, skipping")
 					continue
 				}
 				/* step: update the index */
