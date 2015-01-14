@@ -18,39 +18,53 @@ import (
 	"flag"
 	"fmt"
 	"time"
+	"strings"
 
 	"github.com/gambol99/config-fs/store/dynamic"
 	"github.com/gambol99/config-fs/store/fs"
 	"github.com/gambol99/config-fs/store/kv"
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golang/glog"
-	"strings"
 )
 
 const (
 	DEFAULT_MOUNT_POINT    = "/config"
+	DEFAULT_ROOT_KEY       = "/"
 	DEFAULT_DELETE_ON_EXIT = false
 	DEFAULT_PRE_SYNC       = true
 	DEFAULT_READ_ONLY      = true
+	DEFAULT_DELETE_STALE   = false
 	DEFAULT_INTERVAL       = 900
 	DEFAULT_DYNAMIC_PREFIX = "$TEMPLATE$"
 	VERBOSE_LEVEL          = 5
 	VERBOSE_INFO           = 3
 )
 
-/* --- command line options ---- */
-var (
-	mount_point                                *string
-	delete_on_exit, read_only, pre_synchronize *bool
-	refresh_interval                           *int
-)
+var options struct {
+	/* the mount point of the config directory */
+	cfg_directory string
+	/* should we delete on exit */
+	delete_on_exit bool
+	/* the refresh interval */
+	refresh_interval int
+	/* a read only config directory, i.e. do not syncs changes back */
+	read_only bool
+	/* should be perform a sync on startup */
+	sync_on_startup bool
+	/* delete stale files - delete any files NOT in the k/v store */
+	delete_stale_files bool
+	/* the root for the configuration store */
+	root_key string
+	}
 
 func init() {
-	mount_point = flag.String("mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
-	delete_on_exit = flag.Bool("delete", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
-	refresh_interval = flag.Int("interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
-	read_only = flag.Bool("readonly", DEFAULT_READ_ONLY, "wheather or not the config store of read-only")
-	pre_synchronize = flag.Bool("sync", DEFAULT_PRE_SYNC, "wheather or not to perform a initial config sync against the backend")
+	flag.StringVar(&options.root_key,"root", DEFAULT_ROOT_KEY, "the root within the k/v store to base the config on")
+	flag.StringVar(&options.cfg_directory, "mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
+	flag.BoolVar(&options.delete_on_exit, "delete_on_exit", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
+	flag.IntVar(&options.refresh_interval, "interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
+	flag.BoolVar(&options.read_only, "read_only", DEFAULT_READ_ONLY, "wheather or not the config store of read-only")
+	flag.BoolVar(&options.sync_on_startup, "pre_sync", DEFAULT_PRE_SYNC, "wheather or not to perform a initial config sync against the backend")
+	flag.BoolVar(&options.delete_stale_files, "delete_stale", DEFAULT_DELETE_STALE, "delete stale files, i.e files which do not exists in the backend k/v store")
 }
 
 /* The interface to the config-fs */
@@ -86,7 +100,7 @@ type ConfigurationStore struct {
 
 /* Create a new configuration store */
 func NewConfigurationStore() (Store, error) {
-	glog.Infof("Creating a new configuration store, mountpoint: '%s'")
+	glog.Infof("Creating a new configuration store, mountpoint: '%s'", options.cfg_directory)
 	/* step: we create the kv store */
 	service := new(ConfigurationStore)
 	/* create the channel for k/v notifications */
@@ -102,7 +116,7 @@ func NewConfigurationStore() (Store, error) {
 		service.shutdownChannel = make(chan bool, 1)
 		service.dynamicEventChannel = make(dynamic.DynamicUpdateChannel, 10)
 		service.filesystemEventChannel = make(WatchServiceChannel, 10)
-		service.timerEventChannel = time.NewTicker(time.Duration(*refresh_interval) * time.Second)
+		service.timerEventChannel = time.NewTicker(time.Duration(options.refresh_interval) * time.Second)
 		return service, nil
 	}
 }
@@ -111,26 +125,27 @@ func (r *ConfigurationStore) Close() {
 	glog.Infof("Request to shutdown and release the resources")
 	r.shutdownChannel <- true
 	/* step: if requested, delete the configuration directory */
-	if *delete_on_exit {
+	if options.delete_on_exit {
 		r.Delete()
 	}
 }
 
 /* Synchronize the key/value store with the configuration directory */
 func (r *ConfigurationStore) Synchronize() error {
+	glog.Infof("Starting the sychronization between root: %s, mount: %s, store: %s", options.root_key,
+		options.cfg_directory, r.kv.URL())
 
 	/* step: if the base directory does not exists, we try and create it */
-	if r.fs.IsDirectory(*mount_point) == false {
-		glog.Infof("Creating the base directory: %s for you", *mount_point)
-		if err := r.fs.Mkdirp(*mount_point); err != nil {
-			glog.Errorf("Failed to create the base directory: %s, error: %s", *mount_point, err)
+	if r.fs.IsDirectory(options.cfg_directory) == false {
+		glog.Infof("Creating the base directory: %s for you", options.cfg_directory)
+		if err := r.fs.Mkdirp(options.cfg_directory); err != nil {
+			glog.Errorf("Failed to create the base directory: %s, error: %s", options.cfg_directory, err)
 			return err
 		}
 	}
-
 	/* step: perform a one-time build of the configuration store */
-	if *pre_synchronize {
-		glog.Infof("Starting the sychronization between mount: %s and store: %s", *mount_point, r.kv.URL())
+	if options.sync_on_startup {
+		glog.Infof("Perform a initial presync of the confiuration directory")
 		if err := r.BuildFileSystem(); err != nil {
 			glog.Errorf("Failed to build the initial filesystem, error: %s", err)
 			return err
@@ -149,7 +164,7 @@ func (r *ConfigurationStore) Synchronize() error {
 	*/
 	go func() {
 		/* step: add a watch on the K/V store for the root directory - i.e. watch for ALL changes */
-		r.kv.Watch("/")
+		r.kv.Watch(options.root_key)
 
 		/* step: enter into the main event loop */
 		for {
@@ -178,9 +193,9 @@ func (r *ConfigurationStore) Synchronize() error {
 
 /* we delete all the configuration files */
 func (r *ConfigurationStore) Delete() error {
-	glog.Infof("Deleting the entire configuration directory: %s as requested", *mount_point)
-	if err := r.fs.Rmdir(*mount_point); err != nil {
-		glog.Errorf("Failed to removing the configuration directory: %s, error: %s", *mount_point, err)
+	glog.Infof("Deleting the entire configuration directory: %s as requested", options.cfg_directory)
+	if err := r.fs.Rmdir(options.cfg_directory); err != nil {
+		glog.Errorf("Failed to removing the configuration directory: %s, error: %s", options.cfg_directory, err)
 		return err
 	}
 	return nil
@@ -365,7 +380,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 
 /* Converts the k/v path to the full path on disk - essentially mount_point + node_path */
 func (r *ConfigurationStore) FullPath(path string) string {
-	return fmt.Sprintf("%s%s", *mount_point, path)
+	return fmt.Sprintf("%s%s", options.cfg_directory, path)
 }
 
 func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
@@ -379,8 +394,8 @@ func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
 }
 
 func (r *ConfigurationStore) BuildFileSystem() error {
-	glog.Infof("Building the file system from k/v stote at: %s", *mount_point)
-	r.BuildDirectory("/")
+	glog.Infof("Building the file system from k/v stote at: %s", options.cfg_directory)
+	r.BuildDirectory(options.root_key)
 	return nil
 }
 
@@ -414,7 +429,7 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 			case node.IsDir():
 				if r.fs.Exists(full_path) == false {
 					glog.V(VERBOSE_LEVEL).Infof("BuildDiectory() creating directory item: %s", full_path)
-					r.fs.Mkdir(full_path)
+					r.fs.Mkdirp(full_path)
 				}
 				/* go recursive and build the contents of that directory */
 				if err := r.BuildDirectory(node.Path); err != nil {
