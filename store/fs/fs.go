@@ -114,6 +114,10 @@ func (r *StoreFS) Update(path string, value string) error {
 	} else {
 		/* step: get a hash of the new content */
 		content_sum := r.HashString(value)
+
+		/* step: display the hashes */
+		glog.V(VERBOSE_LEVEL).Infof("Content hashes, file: %s, current: %x, new: %x", path, file_sum, content_sum)
+
 		if file_sum == content_sum {
 			glog.Infof("The content of config file: %s has not changed, skipping the update", path)
 		} else {
