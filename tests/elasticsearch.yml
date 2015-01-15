@@ -1,0 +1,30 @@
+$TEMPLATE$
+################################### Cluster ###################################
+
+cluster.name: es-prod
+
+#################################### Node #####################################
+
+node.master: true
+node.data: true
+
+#################################### Index ####################################
+
+index.number_of_shards: 5
+index.number_of_replicas: 1
+
+#################################### Paths ####################################
+
+path.conf: /etc/elasticsearch
+path.data: /data
+
+################################### Memory ####################################
+
+#bootstrap.mlockall: true
+
+################################## Discovery ##################################
+
+discovery.zen.minimum_master_nodes: 1
+discovery.zen.ping.timeout: 3s
+{{ $endpoints := endpointsl "es_prod_peer" }}
+discovery.zen.ping.unicast.hosts: [ "{{ join $endpoints "\",\"" }}" ]
