@@ -12,7 +12,7 @@
 
 Below is the unit file for the config-fs service
 
-  [Unit]
+    [Unit]
     Description=Configuration Store
     After=docker.service
     Requires=docker.service
@@ -68,10 +68,8 @@ The full code can be found at [elasticsearch](https://github.com/gambol99/coreos
 
 The startup script for elasticsearch - *note, it's not supposed to be extensive, just workable*
 
-  #!/bin/bash
-
-  annonce() { echo "* $@"; }
-
+    #!/bin/bash
+    annonce() { echo "* $@"; }
     VERSION="1.4.1"
     NAME="Elasticsearch ${VERSION}"
     SERVICE_DELAY=${SERVICE_DELAY:-5}
@@ -125,10 +123,10 @@ FIlename: elasticsearch@.service
     WantedBy=multi-user.target
 
 Lets create a few instances
-
-  $ for i in {1..4}; do
-  >   ln -s elasticsearch@.service elasticsearch@${i}.service
-  > done
+ 
+    $ for i in {1..4}; do
+    >   ln -s elasticsearch@.service elasticsearch@${i}.service
+    > done
 
 #### **Create the dynamic config**
 
@@ -149,28 +147,28 @@ The elasticsearch dynamic config template
     discovery.zen.ping.unicast.hosts: [ "{{ join $endpoints "\",\"" }}" ]
 
 Add the template to the K/V store
-
-  $ # copy the above template into a filename: es.yml
-  $ DOC=$(cat es.yaml)
-  $ etcdctl set /prod/cfg/es_cluster/es.yml "$DOC"
-  # make sure the template has been created
-  $ ls /config/prod/cfg/es_cluster/es.yml
-  $ cat $!
+ 
+    $ # copy the above template into a filename: es.yml
+    $ DOC=$(cat es.yaml)
+    $ etcdctl set /prod/cfg/es_cluster/es.yml "$DOC"
+    # make sure the template has been created
+    $ ls /config/prod/cfg/es_cluster/es.yml
+    $ cat $!
 
 #### **Launch elasticsearch**
-
-  $ fleetctl start elasticsearch@1.service
-  # .. and wait for the service to pop up.
-  $ watch fleetctl list-units
-  # validate the service has populated in the dynamic config
-  $ cat /config/prod/cfg/es_cluster/es.yml
-  # is not, make sure the service discovery is funtioning, that consul has registered the service?
-
-  # we can now launch the rest of them
-  $ fleetctl start  elasticsearch@[234].service
-  $ watch fleetclt list-units -full
+ 
+    $ fleetctl start elasticsearch@1.service
+    # .. and wait for the service to pop up.
+    $ watch fleetctl list-units
+    # validate the service has populated in the dynamic config
+    $ cat /config/prod/cfg/es_cluster/es.yml
+    # is not, make sure the service discovery is funtioning, that consul has registered the service?
+  
+    # we can now launch the rest of them
+    $ fleetctl start  elasticsearch@[234].service
+    $ watch fleetclt list-units -full
 
 #### **Validate the cluster**
-
-  # Take a elasticseach instance - grab the 9200 port and
-  $ curl http://<IP>:<PORT>/_cluster/health?pretty=true
+ 
+    # Take a elasticseach instance - grab the 9200 port and
+    $ curl http://<IP>:<PORT>/_cluster/health?pretty=true
