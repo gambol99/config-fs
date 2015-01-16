@@ -26,5 +26,5 @@ path.data: /data
 
 discovery.zen.minimum_master_nodes: 1
 discovery.zen.ping.timeout: 3s
-{{ $endpoints := endpointsl "es_prod_peer" }}
+{{ $endpoints := endpointsl "es-prod-peers" }}
 discovery.zen.ping.unicast.hosts: [ "{{ join $endpoints "\",\"" }}" ]
