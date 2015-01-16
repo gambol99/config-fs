@@ -10,7 +10,7 @@ NAME="Configuration FS"
 MOUNT=${MOUNT_POINT:-/config}
 VERBOSITY=${VERBOSITY:-3}
 
-mkdir -p ${MOUNT_POINT}
+mkdir -p ${MOUNT}
 
 echo "Starting ${NAME}"
 bin/config-fs -logtostderr=true -v=${VERBOSITY} $@
