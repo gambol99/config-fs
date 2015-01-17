@@ -43,7 +43,7 @@ By default the configuration directory is build from root "/", the -root=KEY can
 
 ## Dynamic Config ##
 
-Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "\$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
+Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
 
 ### {{ service "frontend_http" }}
 
