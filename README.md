@@ -187,3 +187,13 @@ Takes a json string and unmarshalls string in an array of map[string]value
     "split":     strings.Split,
     "getenv":    os.Getenv,
     "join":      strings.Join}
+------
+
+#### **Contributing**
+
+ - Fork it
+ - Create your feature branch (git checkout -b my-new-feature)
+ - Commit your changes (git commit -am 'Add some feature')
+ - Push to the branch (git push origin my-new-feature)
+ - Create new Pull Request
+ - If applicable, update the README.md
