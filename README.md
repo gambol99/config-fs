@@ -5,16 +5,14 @@
 
 Config-fs is a key/value backed configuration file system. The daemon process synchronizes the content found in K/V store, converting the keys into files / directories and so forth. Naturally any changes which are made at the K/V end are propagated downstream to the config file system.
 
-Current Status
-------
+#### **Current Status**
 
  - Replication of the K/V store to the configuration directory is working
  - The watcher service needs to be completed and integrated - thus allowing for write access to the backend (though not a priority at the moment)
  - The dynamic resources work, but requires a code clean up, a review and no doubt a number of bug fixes
  - Presently only supports etcd for the K/V store and consul for discovery 
 
-Configuration
-------
+#### **Configuration**
 
        [jest@starfury config-fs]$ stage/config-fs --help
        Usage of stage/config-fs:
@@ -35,13 +33,26 @@ Configuration
          -v=0: log level for V logs
          -vmodule=: comma-separated list of pattern=N settings for file-filtered logging
 
-Configuration Root
------
+#### **Configuration Root**
 
 By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be hide expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
 
+#### **Docker Usage**
 
-## Dynamic Config ##
+	#/usr/bin/docker run \
+	  --name config-store \
+	  -e NAME=config-store \
+	  -e ENVIRONMENT=prod \
+	  -e PRIVATE_IP=${COREOS_PRIVATE_IPV4} \
+	  -e VERBOSITY=10 \
+	  -v /config:/config \
+	  gambol99/config-fs \
+	  -mount=/config \
+	  -store=etcd://${COREOS_PRIVATE_IPV4}:4001 \
+	  -discovery=consul://${COREOS_PRIVATE_IPV4}:8500 \
+	  -root=/env/prod
+
+#### **Dynamic Config** 
 
 Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
 
