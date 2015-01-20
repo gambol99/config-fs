@@ -47,4 +47,5 @@ func main() {
 
 	glog.Infof("Recieved a kill signal, exitting")
 	storefs.Close()
+	/* @@TODO - should really wait on a signal from the store that its safe to close at this point */
 }

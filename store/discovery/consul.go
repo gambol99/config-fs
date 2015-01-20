@@ -26,15 +26,16 @@ import (
 const DEFAULT_WAIT_TIME = 10
 
 type ConsulServiceAgent struct {
+	/* a lock for the watches services */
 	sync.Mutex
 	/* the client */
 	client *consulapi.Client
 	/* the wait index */
-	waitIndex uint64
+	wait_index uint64
 	/* the stop channels for the services */
-	watchedServices map[string]chan bool
+	watched_services map[string]chan bool
 	/* the channel we use to send updates */
-	updateChannel ServiceUpdateChannel
+	update_channel ServiceUpdateChannel
 }
 
 func NewConsulServiceAgent(uri *url.URL, channel ServiceUpdateChannel) (Discovery, error) {
@@ -48,8 +49,8 @@ func NewConsulServiceAgent(uri *url.URL, channel ServiceUpdateChannel) (Discover
 		return nil, err
 	}
 	agent := new(ConsulServiceAgent)
-	agent.updateChannel = channel
-	agent.watchedServices = make(map[string]chan bool, 0)
+	agent.update_channel = channel
+	agent.watched_services = make(map[string]chan bool, 0)
 	agent.client = client
 	return agent, nil
 }
@@ -58,9 +59,9 @@ func (r *ConsulServiceAgent) Close() error {
 	r.Lock()
 	defer r.Unlock()
 	/* step: check if we have any watches to close */
-	glog.V(VERBOSE_LEVEL).Infof("We have %d watches to shutdown resources on", len(r.watchedServices))
+	glog.V(VERBOSE_LEVEL).Infof("We have %d watches to shutdown resources on", len(r.watched_services))
 	/* step: we iterate the watches and send a shutdown signal to end the goroutine */
-	for service, channel := range r.watchedServices {
+	for service, channel := range r.watched_services {
 		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service)
 		channel <- true
 	}
@@ -119,7 +120,7 @@ func (r *ConsulServiceAgent) Watch(service string) error {
 	defer r.Unlock()
 
 	/* step: check if the resource is already being monitored */
-	if _, found := r.watchedServices[service]; found {
+	if _, found := r.watched_services[service]; found {
 		glog.V(VERBOSE_LEVEL).Infof("Watch() the service %s is already being watched by this agent, skipping", service)
 		return nil
 	}
@@ -127,16 +128,16 @@ func (r *ConsulServiceAgent) Watch(service string) error {
 	glog.V(VERBOSE_LEVEL).Infof("Watch() adding a watch for changes to service: %s", service)
 
 	/* step: we create a stop channel which is used by the goroutine below */
-	shutdownChannel := make(chan bool)
-	r.watchedServices[service] = shutdownChannel
+	shutdown_channel := make(chan bool)
+	r.watched_services[service] = shutdown_channel
 
 	go func() {
 		catalog := r.client.Catalog()
 		killOff := false
-		r.waitIndex = uint64(0)
+		r.wait_index = uint64(0)
 		go func() {
 			/* step: we wait for someone to send a shutdown signal */
-			<-shutdownChannel
+			<-shutdown_channel
 			killOff = true
 		}()
 		for {
@@ -144,7 +145,7 @@ func (r *ConsulServiceAgent) Watch(service string) error {
 				glog.V(3).Infof("Watch() shutting down watch on service: %s", service)
 				break
 			}
-			if r.waitIndex == 0 {
+			if r.wait_index == 0 {
 				/* step: lets get the wait index */
 				_, meta, err := catalog.Service(service, "", &consulapi.QueryOptions{})
 				if err != nil {
@@ -152,37 +153,38 @@ func (r *ConsulServiceAgent) Watch(service string) error {
 					time.Sleep(5 * time.Second)
 				} else {
 					/* update the wait index for this service */
-					r.waitIndex = meta.LastIndex
+					r.wait_index = meta.LastIndex
 				}
 			}
 			/* step: build the query - make sure we have a timeout */
-			queryOptions := &consulapi.QueryOptions{WaitIndex: r.waitIndex, WaitTime: DEFAULT_WAIT_TIME * time.Second}
+			queryOptions := &consulapi.QueryOptions{WaitIndex: r.wait_index, WaitTime: DEFAULT_WAIT_TIME * time.Second}
 
 			/* step: making a blocking watch call for changes on the service */
 			_, meta, err := catalog.Service(service, "", queryOptions)
 			if err != nil {
 				glog.Errorf("Failed to wait for service to change, error: %s", err)
-				r.waitIndex = uint64(0)
+				r.wait_index = uint64(0)
 				time.Sleep(5 * time.Second)
 			} else {
 				if killOff {
 					continue
 				}
 				/* step: if the wait and last index are the same, we can continue */
-				if r.waitIndex == meta.LastIndex {
+				if r.wait_index == meta.LastIndex {
 					continue
 				}
 				/* step: update the index */
-				r.waitIndex = meta.LastIndex
+				r.wait_index = meta.LastIndex
 				/* step: send the update upstream */
 				glog.V(VERBOSE_LEVEL).Infof("Watch() service: %s changes; sending upstream", service)
-				r.updateChannel <- service
+				r.update_channel <- service
 			}
 		}
 	}()
 	return nil
 }
 
+/* convert our catalog service to an endpoint */
 func (r *ConsulServiceAgent) GetEndpoint(svc *consulapi.CatalogService) Endpoint {
 	var endpoint Endpoint
 	endpoint.ID = svc.ServiceID

@@ -200,21 +200,18 @@ func (r *DynamicConfig) FindService(service string) (discovery.Service, error) {
 }
 
 func (r *DynamicConfig) FindServices() ([]discovery.Service, error) {
-	glog.V(VERBOSE_LEVEL).Infof("FindServices()")
 	/* step: make sure a discovery service exists */
 	if r.discovery == nil {
 		return nil, errors.New("No service discovery service was specified in config")
 	}
-
 	/* step: get a list of services */
-	services, err := r.discovery.Services()
-	if err != nil {
+	if services, err := r.discovery.Services(); err != nil {
 		glog.Errorf("Failed to retrieve a list of services from discovery provider, error: %s", err)
 		return nil, err
+	} else {
+		/* step: return the services */
+		return services, nil
 	}
-
-	/* step: return the services */
-	return services, nil
 }
 
 func (r *DynamicConfig) FindEndpoints(service string) ([]discovery.Endpoint, error) {
