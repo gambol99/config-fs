@@ -52,11 +52,10 @@ type DynamicStoreImpl struct {
 	prefix string
 }
 
-func NewDynamicStore(prefix string, backend kv.KVStore) DynamicStore {
+func NewDynamicStore(prefix string) DynamicStore {
 	service := new(DynamicStoreImpl)
 	service.resources = make(map[string]DynamicResource, 0)
 	service.prefix = DYNAMIC_PREFIX
-	service.backend = backend
 	if prefix != "" {
 		service.prefix = prefix
 	}
