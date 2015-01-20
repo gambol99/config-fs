@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
+	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"text/template"
-	"reflect"
 
 	"github.com/gambol99/config-fs/store/discovery"
 	"github.com/gambol99/config-fs/store/kv"
@@ -81,22 +81,24 @@ func NewDynamicResource(filename, content string) (DynamicResource, error) {
 			config.discovery = disx
 			/* step: create the function map for this template */
 			functionMap := template.FuncMap{
-				"service":    config.FindService,
-				"services":   config.FindServices,
+				"base":       path.Base,
+				"contained":  config.Contains,
+				"dir":        path.Dir,
 				"endpoints":  config.FindEndpoints,
 				"endpointsl": config.FindEndpointsList,
 				"get":        config.GetKeyPair,
+				"getenv":     os.Getenv,
+				"getl":       config.GetList,
 				"gets":       config.GetKerPairs,
 				"getv":       config.GetValue,
-				"getl":       config.GetList,
+				"join":       strings.Join,
 				"json":       config.UnmarshallJSON,
 				"jsona":      config.UnmarshallJSONArray,
-				"contained":  config.Contains,
-				"base":       path.Base,
-				"dir":        path.Dir,
+				"prefix":     strings.HasPrefix,
+				"service":    config.FindService,
+				"services":   config.FindServices,
 				"split":      strings.Split,
-				"getenv":     os.Getenv,
-				"join":       strings.Join}
+				"suffix":     strings.HasSuffix}
 
 			if resource, err := template.New(filename).Funcs(functionMap).Parse(content); err != nil {
 				glog.Errorf("Failed to parse the dynamic config: %s, error: %s", config.path, err)

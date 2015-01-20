@@ -65,19 +65,19 @@ func (r *ConsulServiceAgent) Close() error {
 	return nil
 }
 
-func (r *ConsulServiceAgent) Service(name string) (Service,error) {
+func (r *ConsulServiceAgent) Service(name string) (Service, error) {
 	glog.V(VERBOSE_LEVEL).Infof("Service() service: %s", name)
 	if services, err := r.Services(); err != nil {
 		glog.Errorf("Service() failed to find services for service: %s, error: %s", name, err)
 		return Service{}, err
 	} else {
 		for _, service := range services {
-		  	if service.Name == name {
+			if service.Name == name {
 				return service, nil
 			}
 		}
 	}
-	return Service{}, errors.New("The service: " + name + " does not exist in discovery provider" )
+	return Service{}, errors.New("The service: " + name + " does not exist in discovery provider")
 }
 
 func (r *ConsulServiceAgent) Services() ([]Service, error) {
@@ -90,7 +90,7 @@ func (r *ConsulServiceAgent) Services() ([]Service, error) {
 	} else {
 		services := make([]Service, 0)
 		for name, tags := range list {
-			services = append(services, Service{name,tags} )
+			services = append(services, Service{name, tags})
 		}
 		return services, nil
 	}

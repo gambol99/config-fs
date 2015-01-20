@@ -17,8 +17,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/gambol99/config-fs/store/dynamic"
 	"github.com/gambol99/config-fs/store/fs"
@@ -55,10 +55,10 @@ var options struct {
 	delete_stale_files bool
 	/* the root for the configuration store */
 	root_key string
-	}
+}
 
 func init() {
-	flag.StringVar(&options.root_key,"root", DEFAULT_ROOT_KEY, "the root within the k/v store to base the config on")
+	flag.StringVar(&options.root_key, "root", DEFAULT_ROOT_KEY, "the root within the k/v store to base the config on")
 	flag.StringVar(&options.cfg_directory, "mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
 	flag.BoolVar(&options.delete_on_exit, "delete_on_exit", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	flag.IntVar(&options.refresh_interval, "interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
