@@ -57,6 +57,8 @@ func NewConsulServiceAgent(uri *url.URL, channel ServiceUpdateChannel) (Discover
 func (r *ConsulServiceAgent) Close() error {
 	r.Lock()
 	defer r.Unlock()
+	/* step: check if we have any watches to close */
+	glog.V(VERBOSE_LEVEL).Infof("We have %d watches to shutdown resources on", len(r.watchedServices))
 	/* step: we iterate the watches and send a shutdown signal to end the goroutine */
 	for service, channel := range r.watchedServices {
 		glog.V(VERBOSE_LEVEL).Infof("Closing the watch on service: %s", service)
