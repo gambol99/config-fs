@@ -1,6 +1,6 @@
 [![Build Status](https://drone.io/github.com/gambol99/config-fs/status.png)](https://drone.io/github.com/gambol99/config-fs/latest)
 
-## Configuration File system ## - [work in progress]
+## Configuration File system ##
 ------
 
 Config-fs is a key/value backed configuration file system. The daemon process synchronizes the content found in K/V store, converting the keys into files / directories and so forth. Naturally any changes which are made at the K/V end are propagated downstream to the config file system.
