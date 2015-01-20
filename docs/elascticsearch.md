@@ -5,8 +5,8 @@
 
 #### **Requirements**
 
- - A working CoreOS cluster - if you've not got this in place, take a look at ([coreos-example](https://github.com/gambol99/coreos-vagrant)
- - Service registration for container services[Consul](www.consul.io) in place. Again, take a look at the above link if you've not got anything in place
+ - A working CoreOS cluster - if you've not got this in place, take a look at ([coreos-example])(https://github.com/gambol99/coreos-vagrant)
+ - Service registration for container services [Consul](www.consul.io) in place. Again, take a look at the above link if you've not got anything in place
 
 #### **Config-FS (config-fs.service)**
 
