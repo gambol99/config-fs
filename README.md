@@ -5,16 +5,14 @@
 
 Config-fs is a key/value backed configuration file system. The daemon process synchronizes the content found in K/V store, converting the keys into files / directories and so forth. Naturally any changes which are made at the K/V end are propagated downstream to the config file system.
 
-Current Status
-------
+#### **Current Status**
 
  - Replication of the K/V store to the configuration directory is working
  - The watcher service needs to be completed and integrated - thus allowing for write access to the backend (though not a priority at the moment)
  - The dynamic resources work, but requires a code clean up, a review and no doubt a number of bug fixes
  - Presently only supports etcd for the K/V store and consul for discovery 
 
-Configuration
-------
+#### **Configuration**
 
        [jest@starfury config-fs]$ stage/config-fs --help
        Usage of stage/config-fs:
@@ -35,17 +33,30 @@ Configuration
          -v=0: log level for V logs
          -vmodule=: comma-separated list of pattern=N settings for file-filtered logging
 
-Configuration Root
------
+#### **Configuration Root**
 
 By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be hide expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
 
+#### **Docker Usage**
 
-## Dynamic Config ##
+	#/usr/bin/docker run \
+	  --name config-store \
+	  -e NAME=config-store \
+	  -e ENVIRONMENT=prod \
+	  -e PRIVATE_IP=${COREOS_PRIVATE_IPV4} \
+	  -e VERBOSITY=10 \
+	  -v /config:/config \
+	  gambol99/config-fs \
+	  -mount=/config \
+	  -store=etcd://${COREOS_PRIVATE_IPV4}:4001 \
+	  -discovery=consul://${COREOS_PRIVATE_IPV4}:8500 \
+	  -root=/env/prod
 
-Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "\$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
+#### **Dynamic Config** 
 
-### {{ service "frontend_http" }}
+Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
+
+##### {{ service "frontend_http" }}
 
 The method search the discovery provider for a service, returning the following struct
 
@@ -59,7 +70,7 @@ The method search the discovery provider for a service, returning the following 
     {{ $service := service "frontend_http" }}
     {{ $service.Tags }}
 
-### {{ services }}
+##### {{ services }}
 
 Returns a array of all services from the discovery provider
 
@@ -67,7 +78,7 @@ Returns a array of all services from the discovery provider
     Name: {{ .Name }}, Tags: {{ print "," | join .Tags }}
     {{ end }}
 
-### {{ endpoints "frontend_http" }}
+##### {{ endpoints "frontend_http" }}
 
 Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints in the service request.
 
@@ -105,14 +116,14 @@ Similar to the above method, it returns an array of <IPADDRESS>:<PORT> endpoints
     server 10.241.1.75_31002 10.241.1.75:31002
     server 10.241.1.75_31001 10.241.1.75:31001
 
-### {{ endpointsl "frontend_http" }}
+##### {{ endpointsl "frontend_http" }}
 
 A helper method for the one above, it simply hands back the endpoints as a array of strings
 
 	{{$services := endpoints "frontend_http"}}
 	services: {{join $services ","}}
 
-### {{ get "/this/is/a/key/im/interested/in" }}
+##### {{ get "/this/is/a/key/im/interested/in" }}
 
 The Get() method is used to retrieve and watch a key/pair with in the K/V store.
 
@@ -128,7 +139,7 @@ The Get() method is used to retrieve and watch a key/pair with in the K/V store.
     {{$node := get "/prod/config/database/password" }}
     {{$node.Path}} {{$node.Value}}
 
-### {{ gets "/this/is/a/key/im/interested/in" }}
+##### {{ gets "/this/is/a/key/im/interested/in" }}
 
 Returns an array of keypairs - essentially a list of children (files/directories) under the path
 
@@ -137,14 +148,14 @@ Returns an array of keypairs - essentially a list of children (files/directories
 
     {{ end }}
 
-### {{ getv "/this/is/a/key/im/interested/in" }}
+##### {{ getv "/this/is/a/key/im/interested/in" }}
 
 The GetValue() method is used to retrieve 'value' of a key with in the K/V store.
 
     username: product_user
     password: {{ getv "/prod/config/db/password" }}
 
-### {{ getr "/this/is/a/key/im/interested/" }}
+##### {{ getr "/this/is/a/key/im/interested/" }}
 
 The GetList() method is used to produce an aray of child keys (excluding directories) under the path specified.
 
@@ -153,7 +164,7 @@ Lets just assume for some incredible reason we are using the directory /prod/con
     {{range getr "/prod/config/zookeeper"}}
     server {{.Value}}{{end}
 
-### contained
+##### contained
 
 Checks to see if a value is inside an array i.e. check if a tag is present in a service
 
@@ -161,15 +172,15 @@ Checks to see if a value is inside an array i.e. check if a tag is present in a 
     Not really a fan of this pipeline thing ... give me ERB any day
     {{end}}
 
-### json
+##### json
 
 Takes a argument, hopefully some json string and unmarshalls string in a map[string]value
 
-### jsona
+##### jsona
 
 Takes a json string and unmarshalls string in an array of map[string]value
 
-### Additional (well add example later)
+##### Additional (well add example later)
 
     "base":      path.Base,
     "dir":       path.Dir,
