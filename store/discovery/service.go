@@ -25,5 +25,5 @@ type Service struct {
 }
 
 func (s Service) String() string {
-	return fmt.Sprintf("name: %s, tags: %v",s.Name, strings.Join(s.Tags,",") )
+	return fmt.Sprintf("name: %s, tags: %v", s.Name, strings.Join(s.Tags, ","))
 }

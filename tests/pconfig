@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+#   Author: Rohith (gambol99@gmail.com)
+#   Date: 2015-01-20 13:13:28 +0000 (Tue, 20 Jan 2015)
+#
+#  vim:ts=2:sw=2:et
+#
+
+usage() {
+  cat <<EOF
+
+  Usage: $(basename $0) [options] key file
+  Description: quick and easy way of setting a key in etcd 
+
+EOF
+  [ -n "$1" ] && {
+    echo "[error] $1";
+    exit 1;
+  }
+  exit 0
+}
+ETCD_KEY="$1"
+ETCD_VALUE="$2"
+
+[ -z "${ETCDCTL}"    ] && usage "please set the environment variable ETCDCTL=<PATH to etcdctl>"
+[ -z "${ETCD_HOST}"  ] && usage "please set the environment variable ETCD_HOST=<etcd host:port>"
+[ -z "${ETCD_KEY}"   ] && usage "you have not specified the key to add"
+[ -z "${ETCD_VALUE}" ] && usage "you have not specified the file for the value"
+[ -f "${ETCD_VALUE}" ] || usage "the file: ${ETCD_VALUE} is not a file"
+
+echo "Setting the key ${ETCD_KEY}"
+
+DOCUMENT=$(cat ${ETCD_VALUE})
+
+${ETCDCTL} --peers ${ETCD_HOST} set "${ETCD_KEY}" "${DOCUMENT}"
+

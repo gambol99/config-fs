@@ -34,11 +34,10 @@ func init() {
 
 type ServiceUpdateChannel chan string
 
-
 /* The Discovery service is a binding between X service discovery providers (i.e. consul, skydns, discoverd etc) */
 type Discovery interface {
 	/* Get a service from discovery */
-	Service(service string) (Service,error)
+	Service(service string) (Service, error)
 	/* Get a list of the services */
 	Services() ([]Service, error)
 	/* Retrieve a list of endpoints for a service */
