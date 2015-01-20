@@ -85,17 +85,16 @@ type ConfigurationStore struct {
 	kv kv.KVStore
 	/* the templated resources */
 	dynamic dynamic.DynamicStore
-
 	/* the shutdown signal */
-	shutdownChannel chan bool
+	shutdown_channel chan bool
 	/* updates and changes to templated resourcs channel */
-	dynamicEventChannel dynamic.DynamicUpdateChannel
+	dynamic_event_channel dynamic.DynamicUpdateChannel
 	/* changes and updates to the file system channel */
-	filesystemEventChannel WatchServiceChannel
+	filesystem_event_channel WatchServiceChannel
 	/* changes and uydates to the k/v store */
-	nodeEventChannel kv.NodeUpdateChannel
+	node_event_channel kv.NodeUpdateChannel
 	/* a timer channel */
-	timerEventChannel *time.Ticker
+	timer_event_channel *time.Ticker
 }
 
 /* Create a new configuration store */
@@ -104,26 +103,26 @@ func NewConfigurationStore() (Store, error) {
 	/* step: we create the kv store */
 	service := new(ConfigurationStore)
 	/* create the channel for k/v notifications */
-	service.nodeEventChannel = make(kv.NodeUpdateChannel, 10)
+	service.node_event_channel = make(kv.NodeUpdateChannel, 10)
 
-	if kvstore, err := kv.NewKVStore(service.nodeEventChannel); err != nil {
+	if kvstore, err := kv.NewKVStore(service.node_event_channel); err != nil {
 		glog.Fatalf("Failed to create the K/V Store, error: %s", err)
 		return nil, err
 	} else {
 		service.fs = fs.NewStoreFS()
 		service.kv = kvstore
-		service.dynamic = dynamic.NewDynamicStore(DEFAULT_DYNAMIC_PREFIX, kvstore)
-		service.shutdownChannel = make(chan bool, 1)
-		service.dynamicEventChannel = make(dynamic.DynamicUpdateChannel, 10)
-		service.filesystemEventChannel = make(WatchServiceChannel, 10)
-		service.timerEventChannel = time.NewTicker(time.Duration(options.refresh_interval) * time.Second)
+		service.dynamic = dynamic.NewDynamicStore(DEFAULT_DYNAMIC_PREFIX)
+		service.shutdown_channel = make(chan bool, 1)
+		service.dynamic_event_channel = make(dynamic.DynamicUpdateChannel, 10)
+		service.filesystem_event_channel = make(WatchServiceChannel, 10)
+		service.timer_event_channel = time.NewTicker(time.Duration(options.refresh_interval) * time.Second)
 		return service, nil
 	}
 }
 
 func (r *ConfigurationStore) Close() {
 	glog.Infof("Request to shutdown and release the resources")
-	r.shutdownChannel <- true
+	r.shutdown_channel <- true
 	/* step: if requested, delete the configuration directory */
 	if options.delete_on_exit {
 		r.Delete()
@@ -169,19 +168,19 @@ func (r *ConfigurationStore) Synchronize() error {
 		/* step: enter into the main event loop */
 		for {
 			select {
-			case event := <-r.nodeEventChannel:
+			case event := <-r.node_event_channel:
 				/* change to the k/v */
 				go r.HandleNodeEvent(event)
-			case event := <-r.dynamicEventChannel:
+			case event := <-r.dynamic_event_channel:
 				/* a template has changed */
 				go r.HandleTemplateEvent(event)
-			case event := <-r.filesystemEventChannel:
+			case event := <-r.filesystem_event_channel:
 				/* the file system in the configuration directory has changed */
 				go r.HandleFileNotificationEvent(event)
-			case <-r.timerEventChannel.C:
+			case <-r.timer_event_channel.C:
 				/* a timer has kicked off */
 				go r.HandleTimerEvent()
-			case <-r.shutdownChannel:
+			case <-r.shutdown_channel:
 				/* we have received a request to shutdown */
 				glog.Infof("Recieved the shutdown signal ... shutting down now")
 				break
@@ -345,7 +344,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 		r.dynamic.Delete(path)
 
 		/* step: recreate the dynamic config passing our update channel  */
-		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
+		if content, err := r.dynamic.Create(path, value, r.dynamic_event_channel); err != nil {
 			glog.Errorf("Failed to update the template for path: %s, error: %s", path, err)
 			return err
 		} else {
@@ -358,7 +357,7 @@ func (r *ConfigurationStore) UpdateStoreConfigFile(path string, value string) er
 		/* step: we check if the content of the file is dynamic and we need to create a new dynamic config from it */
 	} else if r.dynamic.IsDynamicContent(path, value) {
 		glog.V(VERBOSE_INFO).Infof("Creating a new dynamic resource templated resource: %s", path)
-		if content, err := r.dynamic.Create(path, value, r.dynamicEventChannel); err != nil {
+		if content, err := r.dynamic.Create(path, value, r.dynamic_event_channel); err != nil {
 			glog.Errorf("Failed to create the template for path: %s, error: %s", path, err)
 			return err
 		} else {
@@ -417,7 +416,7 @@ func (r *ConfigurationStore) BuildDirectory(directory string) error {
 				glog.V(VERBOSE_LEVEL).Infof("BuildDirectory() Creating the file: %s", full_path)
 				/* step: check if the content is templated */
 				if r.dynamic.IsDynamicContent(node.Path, node.Value) {
-					content, err = r.dynamic.Create(node.Path, node.Value, r.dynamicEventChannel)
+					content, err = r.dynamic.Create(node.Path, node.Value, r.dynamic_event_channel)
 					if err != nil {
 						glog.Errorf("Failed to create the templated file: %s, error: %s", full_path, err)
 						continue
