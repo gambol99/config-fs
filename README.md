@@ -35,7 +35,7 @@ Config-fs is a key/value backed configuration file system. The daemon process sy
 
 #### **Configuration Root**
 
-By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be hide expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
+By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
 
 #### **Docker Usage**
 
