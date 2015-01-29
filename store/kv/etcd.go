@@ -15,6 +15,8 @@ package kv
 
 import (
 	"errors"
+	"flag"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -43,7 +45,22 @@ type EtcdStoreClient struct {
 	channel NodeUpdateChannel
 	/* a map of keys presently being watched */
 	watchedKeys map[string]bool
+
 }
+
+var EtcdOptions struct {
+	cert_file, key_file, cacert_file string
+	}
+
+func init() {
+	flag.StringVar(&EtcdOptions.cert_file, "etcd-cert", "", "the etcd certificate file (optional)")
+	flag.StringVar(&EtcdOptions.key_file, "etcd-keycert", "", "the etcd key certificate file (optional)")
+	flag.StringVar(&EtcdOptions.cacert_file, "etcd-cacert", "", "the etcd ca certificate file (optional)")
+}
+
+const (
+	ETCD_PREFIX = "etcd://"
+)
 
 func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, error) {
 	/* step: create the client */
@@ -55,13 +72,30 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 	store.watchedKeys = make(map[string]bool, 0)
 	store.stopChannel = make(chan bool)
 
+	/* step: are we using tls or not? */
+	store_protocol := "http"
+    if EtcdOptions.cacert_file != "" {
+		store_protocol = "https"
+	}
+
 	for _, host := range strings.Split(location.Host, ",") {
-		store.hosts = append(store.hosts, "http://"+host)
+		store.hosts = append(store.hosts, fmt.Sprintf("%s://%s", store_protocol, host))
 	}
 	glog.Infof("Creating a Etcd Agent for K/V Store, host: %s", store.hosts)
 
 	/* step: create the etcd client */
-	store.client = etcd.NewClient(store.hosts)
+	if EtcdOptions.cacert_file != "" {
+	    client, err := etcd.NewTLSClient(store.hosts, EtcdOptions.cert_file,
+			EtcdOptions.key_file, EtcdOptions.cacert_file )
+		if err != nil {
+			glog.Errorf("Failed to create a TLS connection to etcd: %s, error: %s", *location, err )
+			return nil, err
+		}
+		store.client = client
+	} else {
+		store.client = etcd.NewClient(store.hosts)
+	}
+
 	store.client.SetConsistency(etcd.WEAK_CONSISTENCY)
 
 	/* step: start watching for events */
