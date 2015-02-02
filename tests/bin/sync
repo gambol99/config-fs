@@ -45,7 +45,7 @@ module Etcd
         synchronize_directory options[:basedir]
       end
 
-      def synchronize_directory path = "/"
+      def synchronize_directory path
         key = path
         verbose "synchronize_directory: path: #{path}"
         # step: we get listing of the directory and iterate the directory
@@ -97,17 +97,19 @@ module Etcd
       end
 
       def synchronize_key path
-        path.sub(/^#{options[:basedir]}/,"/#{synchronize_prefix}" )
+        "#{synchronize_prefix}/#{path}"
       end
 
       def synchronize_prefix
         @prefix ||= nil
         unless @prefix
-          @prefix = options[:prefix]
-          # remove any slashs
-          @prefix.sub!(/^\//,"")
-          # add a trailing slash
-          @prefix.sub!(/$/,"/") unless @prefix.end_with? "/"
+          @prefix = options[:prefix] || ""
+          unless @prefix.empty?
+            # remove any slashs
+            @prefix.sub!(/^\/*/,"/")
+            # remove a trailing slash
+            @prefix.sub!(/\/$/,"")
+          end
         end
         @prefix
       end
@@ -134,7 +136,7 @@ module Etcd
         {
           :host      => '127.0.0.1',
           :port      => 4001,
-          :prefix    => "",
+          :prefix    => nil,
           :overwrite => false
         }
       end
