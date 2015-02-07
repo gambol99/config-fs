@@ -134,7 +134,9 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 				}
 			case <-r.stopChannel:
 				glog.Infof("Shutting down the resources for dynamic config: %s", r.path)
-				r.discovery.Close()
+				if r.discovery != nil {
+					r.discovery.Close()
+				}
 				r.store.Close()
 			}
 		}
