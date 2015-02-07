@@ -397,9 +397,10 @@ func (r *ConfigurationStore) BuildFileSystem() error {
 	for attempt := 0; attempt <= 3; attempt++ {
 		if err := r.BuildDirectory(options.root_key); err != nil {
 			time.Sleep(2 * time.Second)
-			continue
+		} else {
+			glog.Infof("Successfully rebuilt the file system")
+			break
 		}
-		glog.Infof("Successfully rebuilt the file system")
 	}
 	return nil
 }
