@@ -10,7 +10,7 @@
     * remove calls to os.NewSyscallError
 * More efficient string concatenation for Event.String() [#52](https://github.com/go-fsnotify/fsnotify/pull/52) (thanks @mdlayher)
 * kqueue: fix regression in  rework causing subdirectories to be watched [#48](https://github.com/go-fsnotify/fsnotify/issues/48)
-* kqueue: cleanup internal watch before sending remove event [#51](https://github.com/go-fsnotify/fsnotify/issues/51)
+* kqueue: cleanup internal watch before sending remove event [#51](https://github.com/go-fsnotify/fsnotify/issues/48)
 
 ## v1.0.4 / 2014-09-07
 
@@ -80,10 +80,6 @@
     * provides little benefit over filtering events as they are received, but has  extra bookkeeping and mutexes
     * no tests for the current implementation
     * not fully implemented on Windows [#93](https://github.com/howeyc/fsnotify/issues/93#issuecomment-39285195)
-
-## v0.9.3 / 2014-12-31
-
-* kqueue: cleanup internal watch before sending remove event [#51](https://github.com/go-fsnotify/fsnotify/issues/51)
 
 ## v0.9.2 / 2014-08-17
 
