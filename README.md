@@ -17,7 +17,6 @@ Config-fs is a key/value backed configuration file system. The daemon process sy
        [jest@starfury config-fs]$ stage/config-fs --help
        Usage of stage/config-fs:
          -alsologtostderr=false: log to standard error as well as files
-         -delete_on_exit=false: delete all configuration on exit
          -delete_stale=false: delete stale files, i.e files which do not exists in the backend k/v store
          -discovery="": the service discovery backend being used
          -interval=900: the default interval for performed a forced resync

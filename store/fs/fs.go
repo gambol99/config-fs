@@ -77,11 +77,15 @@ func NewStoreFS() FileStore {
 }
 
 func (r *StoreFS) Create(path string, value string) error {
-	parentDirectory := filepath.Dir(path)
-	if !r.IsDirectory(parentDirectory) {
-		glog.Errorf("Failed to create file: %s, parent: %s does not exist", path, parentDirectory)
-		return DirectoryDoesNotExistErr
+	/* step: get the parent directory and create if need been */
+	parent_directory:= filepath.Dir(path)
+	if !r.IsDirectory(parent_directory) {
+		if err := r.Mkdirp(parent_directory); err != nil {
+			glog.Errorf("Failed to create the parent directory: %s, error: %s", parent_directory, err)
+			return err
+		}
 	}
+
 	/* step: create the file */
 	glog.V(5).Infof("Create() path: %s, creating file, value: %s", path, value)
 	if fs, err := os.Create(path); err != nil {

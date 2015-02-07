@@ -58,10 +58,6 @@ func init() {
 	flag.StringVar(&EtcdOptions.cacert_file, "etcd-cacert", "", "the etcd ca certificate file (optional)")
 }
 
-const (
-	ETCD_PREFIX = "etcd://"
-)
-
 func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, error) {
 	/* step: create the client */
 	store := new(EtcdStoreClient)

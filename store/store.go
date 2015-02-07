@@ -30,7 +30,6 @@ import (
 const (
 	DEFAULT_MOUNT_POINT    = "/config"
 	DEFAULT_ROOT_KEY       = "/"
-	DEFAULT_DELETE_ON_EXIT = false
 	DEFAULT_PRE_SYNC       = true
 	DEFAULT_READ_ONLY      = true
 	DEFAULT_DELETE_STALE   = false
@@ -43,8 +42,6 @@ const (
 var options struct {
 	/* the mount point of the config directory */
 	cfg_directory string
-	/* should we delete on exit */
-	delete_on_exit bool
 	/* the refresh interval */
 	refresh_interval int
 	/* a read only config directory, i.e. do not syncs changes back */
@@ -60,7 +57,6 @@ var options struct {
 func init() {
 	flag.StringVar(&options.root_key, "root", DEFAULT_ROOT_KEY, "the root within the k/v store to base the config on")
 	flag.StringVar(&options.cfg_directory, "mount", DEFAULT_MOUNT_POINT, "the mount point for the K/V store")
-	flag.BoolVar(&options.delete_on_exit, "delete_on_exit", DEFAULT_DELETE_ON_EXIT, "delete all configuration on exit")
 	flag.IntVar(&options.refresh_interval, "interval", DEFAULT_INTERVAL, "the default interval for performed a forced resync")
 	flag.BoolVar(&options.read_only, "read_only", DEFAULT_READ_ONLY, "wheather or not the config store of read-only")
 	flag.BoolVar(&options.sync_on_startup, "pre_sync", DEFAULT_PRE_SYNC, "wheather or not to perform a initial config sync against the backend")
@@ -73,8 +69,6 @@ type Store interface {
 	Synchronize() error
 	/* shutdown the resources */
 	Close()
-	/* delete the configuration directory */
-	Delete() error
 }
 
 /* The implementation of the above */
@@ -123,10 +117,6 @@ func NewConfigurationStore() (Store, error) {
 func (r *ConfigurationStore) Close() {
 	glog.Infof("Request to shutdown and release the resources")
 	r.shutdown_channel <- true
-	/* step: if requested, delete the configuration directory */
-	if options.delete_on_exit {
-		r.Delete()
-	}
 }
 
 /* Synchronize the key/value store with the configuration directory */
@@ -187,16 +177,6 @@ func (r *ConfigurationStore) Synchronize() error {
 			}
 		}
 	}()
-	return nil
-}
-
-/* we delete all the configuration files */
-func (r *ConfigurationStore) Delete() error {
-	glog.Infof("Deleting the entire configuration directory: %s as requested", options.cfg_directory)
-	if err := r.fs.Rmdir(options.cfg_directory); err != nil {
-		glog.Errorf("Failed to removing the configuration directory: %s, error: %s", options.cfg_directory, err)
-		return err
-	}
 	return nil
 }
 
