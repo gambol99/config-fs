@@ -394,7 +394,13 @@ func (r *ConfigurationStore) CheckDirectory(path string) (bool, error) {
 
 func (r *ConfigurationStore) BuildFileSystem() error {
 	glog.Infof("Building the file system from k/v stote at: %s", options.cfg_directory)
-	r.BuildDirectory(options.root_key)
+	for attempt := 0; attempt <= 3; attempt++ {
+		if err := r.BuildDirectory(options.root_key); err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		glog.Infof("Successfully rebuilt the file system")
+	}
 	return nil
 }
 
