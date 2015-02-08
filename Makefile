@@ -9,6 +9,7 @@ AUTHOR=gambol99
 VERSION=$(shell awk '/const Version/ { print $$4 }' version.go | sed 's/"//g')
 
 build:
+	go get github.com/tools/godep
 	godep go build -o stage/${NAME}
 
 docker: build
