@@ -143,6 +143,21 @@ func (r *DynamicConfig) Watch(channel DynamicUpdateChannel) {
 	}()
 }
 
+func (r *DynamicConfig) RetrieveKeyValue(key string, watch bool) (*kv.Node, error) {
+	if node, err := r.store.Get(key); err != nil {
+		glog.Errorf("Failed to reteive the content from key: %s, error: %s", key, err)
+		return nil, err
+	} else {
+		if node.IsDir() {
+			return nil, errors.New("The the key: " + key + " is a directory not a value" )
+		}
+		if watch {
+			r.store.Watch(key)
+		}
+		return node, nil
+	}
+}
+
 func (r *DynamicConfig) Content(forceRefresh bool) (string, error) {
 	/* step: get the content from the cache if there and refresh is false */
 	if r.content != "" && forceRefresh == false {
@@ -249,8 +264,7 @@ func (r *DynamicConfig) FindEndpointsList(service string) ([]string, error) {
 }
 
 func (r *DynamicConfig) GetKeyPair(key string) (kv.Node, error) {
-	if node, err := r.store.Get(key); err != nil {
-		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
+	if node, err := r.RetrieveKeyValue(key, true); err != nil {
 		return kv.Node{}, err
 	} else {
 		return *node, nil
@@ -258,14 +272,10 @@ func (r *DynamicConfig) GetKeyPair(key string) (kv.Node, error) {
 }
 
 func (r *DynamicConfig) GetValue(key string) string {
-	if content, err := r.store.Get(key); err != nil {
-		glog.Errorf("Failed to get the key: %s, error: %s", key, err)
+	if node, err := r.RetrieveKeyValue(key, true); err != nil {
 		return ""
 	} else {
-		/* step: we add a watch on the key */
-		r.store.Watch(key)
-		/* return the content */
-		return content.Value
+		return node.Value
 	}
 }
 
@@ -311,21 +321,29 @@ func (r *DynamicConfig) Contains(list interface{}, elem interface{}) bool {
 	return false
 }
 
-func (r *DynamicConfig) UnmarshallJSONArray(content string) ([]interface{}, error) {
-	var ret []interface{}
-	if err := json.Unmarshal([]byte(content), &ret); err != nil {
-		glog.Errorf("Failed to unmarshall the json data into an array, error: %s", err)
-		return nil, err
-	}
-	return ret, nil
-}
-
-func (r *DynamicConfig) UnmarshallJSON(content string) (map[string]interface{}, error) {
-	var json_data map[string]interface{}
-	if err := json.Unmarshal([]byte(content), &json_data); err != nil {
-		glog.Errorf("Failed to unmarshall the json data, value: %s, error: %s", content, err)
+func (r *DynamicConfig) UnmarshallJSONArray(key string) ([]interface{}, error) {
+	if node, err := r.RetrieveKeyValue(key, true); err != nil {
 		return nil, err
 	} else {
-		return json_data, nil
+		var content []interface{}
+		if err := json.Unmarshal([]byte(node.Value), &content); err != nil {
+			glog.Errorf("Failed to unmarshall the json data into an array, error: %s", err)
+			return nil, err
+		}
+		return content, nil
 	}
 }
+
+func (r *DynamicConfig) UnmarshallJSON(key string) (map[string]interface{}, error) {
+	if node, err := r.RetrieveKeyValue(key, true); err != nil {
+		return nil, err
+	} else {
+		var content map[string]interface{}
+		if err := json.Unmarshal([]byte(node.Value), &content); err != nil {
+			glog.Errorf("Failed to unmarshall the json content: %s, error: %s", node.Value, err)
+			return nil, err
+		}
+		return content, nil
+	}
+}
+
