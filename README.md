@@ -9,7 +9,7 @@ Config-fs is a key/value backed configuration file system. The daemon process sy
 
  - Replication of the K/V store to the configuration directory is working
  - The watcher service needs to be completed and integrated - thus allowing for write access to the backend (though not a priority at the moment)
- - The dynamic resources work, but requires a code clean up, a review and no doubt a number of bug fixes
+ - The dynamic resources work, but requires a code clean up
  - Presently only supports etcd for the K/V store and consul for discovery 
 
 #### **Configuration**
@@ -34,7 +34,7 @@ Config-fs is a key/value backed configuration file system. The daemon process sy
 
 #### **Configuration Root**
 
-By default the configuration directory is build from root "/", the -root=KEY can override this though. A use case for this would be expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; note: ALL dynamic configs take keys from root "/", so in our case we expose the config files, which placing the credentials, values, config etc which the dynamic config reference hidden beneath.
+By default the configuration directory is build from root "/", though yje -root=KEY can override this. A use case for this would be expose only a subsection of the k/v store. For example, we can expose /prod/app/config directory to /config while hiding everything underneath; Note, all dynamic configs take keys root "/" as their context, so in our case we expose the config files, while placing the credentials, values, config etc the dynamic config reference out of reach.
 
 #### **Docker Usage**
 
@@ -49,11 +49,16 @@ By default the configuration directory is build from root "/", the -root=KEY can
 	  -mount=/config \
 	  -store=etcd://${COREOS_PRIVATE_IPV4}:4001 \
 	  -discovery=consul://${COREOS_PRIVATE_IPV4}:8500 \
-	  -root=/env/prod
+	  -root=/env/prod/configs
 
 #### **Dynamic Config** 
 
-Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supported the following methods when templating the file. Dynamic content is defined by simply prefixed the value of the K/V with "$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content.
+Dynamic config works in a similar vain to [confd](https://github.com/kelseyhightower/confd). It presently supports the following methods when templating the file. Dynamic content is simply defined by prefixing the content with "$TEMPLATE$" (yes, not the most sophisticated means, but will work for now), note the prefix is removed from the actual content Note, any references to services or keys in the templates will automatically place a watch on them and trigger a re-generation on mutations.
+
+    # etcdctl set /env/prod/config/test.conf '$TEMPLATE$'
+    database: 
+      username: {{ getv "/env/prod/data/db/username" }}
+      password: {{ getv "/env/prod/data/db/password" }}
 
 ##### {{ service "frontend_http" }}
 
