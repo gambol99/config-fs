@@ -10,7 +10,7 @@ usage() {
   cat <<EOF
 
   Usage: $(basename $0) [options] key file
-  Description: quick and easy way of setting a key in etcd 
+  Description: quick and easy way of setting a key in etcd
 
 EOF
   [ -n "$1" ] && {
@@ -32,5 +32,5 @@ echo "Setting the key ${ETCD_KEY}"
 
 DOCUMENT=$(cat ${ETCD_VALUE})
 
-${ETCDCTL} --peers ${ETCD_HOST} set "${ETCD_KEY}" "${DOCUMENT}"
+${ETCDCTL} --peers ${ETCD_HOST} --no-sync set "${ETCD_KEY}" "${DOCUMENT}"
 
