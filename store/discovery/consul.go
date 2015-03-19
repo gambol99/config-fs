@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	consulapi "github.com/armon/consul-api"
+	consulapi "github.com/hashicorp/consul/api"
 	"github.com/golang/glog"
 )
 
