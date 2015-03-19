@@ -19,6 +19,10 @@ clean:
 	rm -f ./stage/${NAME}
 	go clean
 
+test: build
+	go get github.com/stretchr/testify
+	go test -v 
+
 changelog:
 	git log $(shell git tag | tail -n1)..HEAD --no-merges --format=%B > changelog
 
