@@ -3,10 +3,6 @@
 	"GoVersion": "go1.3.3",
 	"Deps": [
 		{
-			"ImportPath": "github.com/armon/consul-api",
-			"Rev": "74cc5bab614dfecd6fe4ee5975b6ac97d2abc672"
-		},
-		{
 			"ImportPath": "github.com/coreos/etcd/etcdserver/etcdhttp/httptypes",
 			"Comment": "v2.0.0-55-g766e0ad",
 			"Rev": "766e0ad901ad089426ae9a5e40a8ec899b3b4076"
@@ -29,6 +25,11 @@
 		{
 			"ImportPath": "github.com/golang/glog",
 			"Rev": "44145f04b68cf362d9c4df2182967c2275eaefed"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/consul/api",
+			"Comment": "v0.5.0-94-g8ccc23b",
+			"Rev": "8ccc23beff28e42b7e4937c74f0b548a5203db93"
 		}
 	]
 }
