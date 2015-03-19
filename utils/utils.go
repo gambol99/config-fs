@@ -25,7 +25,7 @@ func Attempt(method func() (interface {}, error), attempts, interval int) (inter
 		result, err := method()
 		if err != nil {
 			/* step: lets sleep for x seconds and try again */
-			time.Sleep(interval * time.Second)
+			time.Sleep(time.Duration(interval) * time.Second)
 		} else {
 			return result, nil
 		}
@@ -41,4 +41,5 @@ func Forever(method func() error) error {
 			}
 		}
 	}()
+	return nil
 }

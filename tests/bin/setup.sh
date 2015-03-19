@@ -29,8 +29,8 @@ perform_clean() {
   annonce "perform a cleanup"
   make clean
   [ -d "etcd-v2.0.0-linux-amd64" ] && rm -rf etcd-v2.0.0-linux-amd64/
-  pkill -9 etcd
-  pkill -9 config-fs
+  pkill -9 etcd 2>/dev/null
+  pkill -9 config-fs >/dev/null
 }
 
 perform_build() {
@@ -63,12 +63,7 @@ perform_setup() {
 }
 
 perform_tests() {
-  annonce "performing the tests"
-  check "ls -l ${MOUNT}${ROOT_KEY}/created" "has the root key been created"
-
-  $ETCD rm ${ROOT_KEY}/created
-  check "test -d ${MOUNT}${ROOT_KEY}/created || echo -n ''" "has the root keey been delete"
-
+  make test
 }
 
 perform_clean

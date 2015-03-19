@@ -141,11 +141,6 @@ func (r *StoreFS) Update(path string, value string) error {
 	return nil
 }
 
-func (r *StoreFS) HashString(content string) string {
-	hasher := md5.New()
-	io.WriteString(hasher, content)
-	return string(hasher.Sum(nil))
-}
 
 func (r *StoreFS) Delete(path string) error {
 	glog.V(VERBOSE_LEVEL).Infof("Delete() deleting the file: %s", path)
@@ -337,4 +332,10 @@ func (r *StoreFS) ListDirectories(path string) ([]string, error) {
 		return nil, err
 	}
 	return paths, nil
+}
+
+func (r *StoreFS) HashString(content string) string {
+	hasher := md5.New()
+	io.WriteString(hasher, content)
+	return string(hasher.Sum(nil))
 }
