@@ -3,9 +3,14 @@
 NAME="config-fs"
 ROOT_KEY="/env/testing"
 MOUNT="./mount"
+ETCD_VERSION="https://github.com/coreos/etcd/releases/download/v2.0.0/etcd-v2.0.0-linux-amd64.tar.gz"
+CONSUL_VERSION="https://dl.bintray.com/mitchellh/consul/0.5.0_linux_amd64.zip"
+
+TMPDIR=$(mktemp -d)
+[ -z "$TMPDIR" ] && failed "unable to create a temporary directory"
 
 annonce() {
-  [ -n "$1" ] && echo "** $@"
+  [ -n "$1" ] && echo "**** $@"
 }
 
 failed() {
@@ -13,60 +18,50 @@ failed() {
   exit 1
 }
 
-check() {
-  if [ -n "$1" ]; then
-    echo -n "check: $2 "
-    eval "$1 >/dev/null"
-    if [ $? -ne 0 ]; then
-      echo "[failed]"
-      exit 1
-    fi
-    echo "[passed]"
-  fi
+download_package() {
+  annonce "downloading package: ${1}"
+  curl -skL "$1" > "$2" || failed "failed to download the package: ${1}"
 }
 
-perform_clean() {
-  annonce "perform a cleanup"
-  make clean
-  [ -d "etcd-v2.0.0-linux-amd64" ] && rm -rf etcd-v2.0.0-linux-amd64/
-  pkill -9 etcd 2>/dev/null
-  pkill -9 config-fs >/dev/null
-}
+setup_etcd() {
+  src="${TMPDIR}/etcd.tar.gz"
+  download_package "${ETCD_VERSION}" "${src}"
+  tar zxf "${src}" -C "${TMPDIR}" || failed "failed to extract the etcd software"
 
-perform_build() {
-  export PATH=$PATH:${GOPATH}/bin
-  annonce "performing the compilation of ${NAME}"
-  go get
-  go get github.com/tools/godep
-  make || failed "unable to compile the ${NAME} binary"
-  gzip stage/config-fs -c > config-fs.gz
-}
-
-perform_setup() {
-  annonce "downloading the etcd service for tests"
-  if [ ! -f "etcd-v2.0.0-linux-amd64.tar.gz" ]; then
-    curl -skL https://github.com/coreos/etcd/releases/download/v2.0.0/etcd-v2.0.0-linux-amd64.tar.gz > etcd-v2.0.0-linux-amd64.tar.gz
-  fi
-  tar zxf etcd-v2.0.0-linux-amd64.tar.gz
   annonce "starting the etcd service"
-  nohup etcd-v2.0.0-linux-amd64/etcd > etcd.log 2>&1 &
+  ${TMPDIR}/etcd-*-linux-amd64/etcd > /dev/null 2>&1 &
   [ $? -ne 0 ] && failed "unable to start the etcd service"
-  ETCD="etcd-v2.0.0-linux-amd64/etcdctl --peers 127.0.0.1:4001 --no-sync"
-  annonce "waiting for etcd to startup"
-  sleep 3
-  annonce "starting the config-fs service"
-  $ETCD set ${ROOT_KEY}/created "`date`"
-  mkdir -p mnt/
-  nohup stage/config-fs -store=etcd://127.0.0.1:4001 -root=${ROOT_KEY} -mount=${MOUNT} > test.log 2>&1 &
-  [ $? -ne 0 ] && failed "unable to start the ${NAME} service"
-  sleep 3
+  sleep 4
 }
 
-perform_tests() {
+setup_consul() {
+  src="${TMPDIR}/consul.zip"
+  download_package "${CONSUL_VERSION}" "${src}"
+  $(cd ${TMPDIR}; unzip ${src})
+
+  annonce "starting the consul service"
+  ${TMPDIR}/consul agent -server -bootstrap -bind=127.0.0.1 -client=127.0.0.1 -data-dir=/tmp > /dev/null 2>&1 &
+
+  [ $? -ne 0 ] && failed "unable to start the consul service"
+  sleep 4
+}
+
+setup_deps() {
+  apt-get update -y
+  apt-get install -y unzip
+}
+
+setup() {
+  annonce "provisioning the dependencies"
+  setup_deps
+  annonce "provisioning the etcd service"
+  setup_etcd
+  annonce "provisioning the consul service"
+  setup_consul
+}
+
+setup_tests() {
   make test
 }
 
-perform_clean
-perform_build
-perform_setup
-perform_tests
+setup && setup_tests

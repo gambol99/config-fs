@@ -301,7 +301,7 @@ func (r *StoreFS) Hash(path string) (string, error) {
 
 func (r *StoreFS) Touch(path string) error {
 	if !r.IsFile(path) {
-		glog.Errorf("Failed to hash file: %s, the path is not a file", path)
+		glog.Errorf("Failed to find file: %s, the path is not a file", path)
 		return FileDoesNotExistErr
 	}
 	if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {

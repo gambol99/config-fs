@@ -10,4 +10,4 @@ go:
   - 1.4
   - tip
 install:
-  - make test
+  - /bin/bash -x tests/bin/setup.sh

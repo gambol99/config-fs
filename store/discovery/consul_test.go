@@ -28,6 +28,11 @@ var (
 	agent Discovery
 )
 
+func createServices(t *testing.T) {
+
+
+}
+
 func TestSetup(t *testing.T) {
 	location, err := url.Parse(CONSUL_URL)
 	assert.Nil(t, err, "unable to parse the consul url, error: %s", err)

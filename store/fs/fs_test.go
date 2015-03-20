@@ -27,8 +27,32 @@ var (
 	tmpDir  string
 )
 
+const (
+	TEST_DIRECTORY = "/testdir"
+	TEST_FILE      = "/testfile"
+)
+
 func testPath(path string) string {
 	return fmt.Sprintf("%s%s", tmpDir, path)
+}
+
+func testDirectory() string {
+	return testPath(TEST_DIRECTORY)
+}
+
+func testFile() string {
+	return testPath(TEST_FILE)
+}
+
+func testFiles(t *testing.T) {
+	if err := os.Mkdir(testPath(TEST_DIRECTORY), os.FileMode(DEFAULT_DIRECTORY_PERMS)); err != nil {
+		t.Fatalf("Failed to create a directory, error: %s", err)
+	}
+	if file, err := os.Create(testPath(TEST_FILE)); err != nil {
+		t.Fatalf("Failed to create a directory, error: %s", err)
+	} else {
+    	file.Close()
+	}
 }
 
 func checkExists(path string, t *testing.T) bool {
@@ -53,11 +77,12 @@ func checkContent(path, value string, t *testing.T) bool {
 }
 
 func TestSetup(t *testing.T) {
-	tmp, err := ioutil.TempDir("/tmp", "configfs")
+	var err error
+	tmpDir, err = ioutil.TempDir("/tmp", "configfs")
 	if err != nil {
 		t.Fatalf("Failed to create the temporary directory, error: %s", err)
 	}
-	tmpDir = tmp
+	testFiles(t)
 	fsStore = NewStoreFS()
 }
 
@@ -115,6 +140,52 @@ func TestExists(t *testing.T) {
 	assert.True(t, found, "the file: %s does not exists", path)
 	found = fsStore.Exists("/should_not_be_there")
 	assert.False(t, found, "the file not exist, this should be false")
+}
+
+func TestIsDirectory(t *testing.T) {
+	value := fsStore.IsDirectory(testDirectory())
+	assert.True(t, value, "the should have been true, directory exists")
+	value = fsStore.IsDirectory(testPath("/nothing"))
+	assert.False(t, value, "the should have been false, directory does not exist")
+	value = fsStore.IsDirectory(testFile())
+	assert.False(t, value, "the should have been false, this is a file")
+}
+
+func TestIsFile(t *testing.T) {
+	value := fsStore.IsFile(testFile())
+	assert.True(t, value, "the should have been true, file exists")
+	value = fsStore.IsFile(testPath("/nothing"))
+	assert.False(t, value, "the should have been false, file does not exist")
+	value = fsStore.IsFile(testDirectory())
+	assert.False(t, value, "the should have been false, path is a directory")
+}
+
+func TestMkdir(t *testing.T) {
+	directory := "/testing_directory"
+	err := fsStore.Mkdir(testPath(directory))
+	assert.Nil(t, err, "unable to create a directory, error: %s", err)
+	assert.True(t, checkExists(testPath(directory), t), "the directory was not created")
+}
+
+func TestMkdirp(t *testing.T) {
+	directory := "/testing_directory/t1/t2"
+	err := fsStore.Mkdirp(testPath(directory))
+	assert.Nil(t, err, "unable to create a directories, error: %s", err)
+	assert.True(t, checkExists(testPath(directory), t), "the directories was not created")
+}
+
+func TestRmdir(t *testing.T) {
+	directory := "/testing_directory"
+	err := fsStore.Rmdir(testPath(directory))
+	assert.Nil(t, err, "unable to remove all the directories, error: %s", err)
+	assert.False(t, checkExists(testPath(directory), t), "the directories were not deleted")
+}
+
+func TestTouch(t *testing.T) {
+	file := "/testing_touch"
+	err := fsStore.Touch(testPath(file))
+	assert.NotNil(t, err, "this should have thrown an error")
+	assert.Nil(t, fsStore.Touch(testFile()), "unable to touch the file, error")
 }
 
 func TestTearDown(t *testing.T) {

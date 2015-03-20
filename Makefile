@@ -7,6 +7,7 @@
 NAME=config-fs
 AUTHOR=gambol99
 VERSION=$(shell awk '/const Version/ { print $$4 }' version.go | sed 's/"//g')
+PWD=$(shell pwd)
 
 build:
 	go get github.com/tools/godep
@@ -22,6 +23,10 @@ clean:
 test: build
 	go get github.com/stretchr/testify
 	godep go test ./... -v
+
+unit:
+	docker run --rm -v "${PWD}":/go/src/github.com/gambol99/config-fs \
+      -w /go/src/github.com/gambol99/config-fs -e GOOS=linux golang:1.3.3 /bin/bash -x tests/bin/setup.sh
 
 changelog:
 	git log $(shell git tag | tail -n1)..HEAD --no-merges --format=%B > changelog
