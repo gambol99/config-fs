@@ -149,7 +149,7 @@ func (r *DynamicConfig) RetrieveKeyValue(key string, watch bool) (*kv.Node, erro
 		return nil, err
 	} else {
 		if node.IsDir() {
-			return nil, errors.New("The the key: " + key + " is a directory not a value" )
+			return nil, errors.New("The the key: " + key + " is a directory not a value")
 		}
 		if watch {
 			r.store.Watch(key)
@@ -346,4 +346,3 @@ func (r *DynamicConfig) UnmarshallJSON(key string) (map[string]interface{}, erro
 		return content, nil
 	}
 }
-

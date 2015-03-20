@@ -45,12 +45,11 @@ type EtcdStoreClient struct {
 	channel NodeUpdateChannel
 	/* a map of keys presently being watched */
 	watchedKeys map[string]bool
-
 }
 
 var EtcdOptions struct {
 	cert_file, key_file, cacert_file string
-	}
+}
 
 func init() {
 	flag.StringVar(&EtcdOptions.cert_file, "etcd-cert", "", "the etcd certificate file (optional)")
@@ -70,7 +69,7 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 
 	/* step: are we using tls or not? */
 	store_protocol := "http"
-    if EtcdOptions.cacert_file != "" {
+	if EtcdOptions.cacert_file != "" {
 		store_protocol = "https"
 	}
 
@@ -81,10 +80,10 @@ func NewEtcdStoreClient(location *url.URL, channel NodeUpdateChannel) (KVStore, 
 
 	/* step: create the etcd client */
 	if EtcdOptions.cacert_file != "" {
-	    client, err := etcd.NewTLSClient(store.hosts, EtcdOptions.cert_file,
-			EtcdOptions.key_file, EtcdOptions.cacert_file )
+		client, err := etcd.NewTLSClient(store.hosts, EtcdOptions.cert_file,
+			EtcdOptions.key_file, EtcdOptions.cacert_file)
 		if err != nil {
-			glog.Errorf("Failed to create a TLS connection to etcd: %s, error: %s", *location, err )
+			glog.Errorf("Failed to create a TLS connection to etcd: %s, error: %s", *location, err)
 			return nil, err
 		}
 		store.client = client

@@ -78,7 +78,7 @@ func NewStoreFS() FileStore {
 
 func (r *StoreFS) Create(path string, value string) error {
 	/* step: get the parent directory and create if need been */
-	parent_directory:= filepath.Dir(path)
+	parent_directory := filepath.Dir(path)
 	if !r.IsDirectory(parent_directory) {
 		if err := r.Mkdirp(parent_directory); err != nil {
 			glog.Errorf("Failed to create the parent directory: %s, error: %s", parent_directory, err)
@@ -140,7 +140,6 @@ func (r *StoreFS) Update(path string, value string) error {
 	}
 	return nil
 }
-
 
 func (r *StoreFS) Delete(path string) error {
 	glog.V(VERBOSE_LEVEL).Infof("Delete() deleting the file: %s", path)

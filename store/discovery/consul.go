@@ -71,7 +71,7 @@ func (r *ConsulServiceAgent) Close() error {
 func (r *ConsulServiceAgent) Service(name string) (Service, error) {
 	glog.V(VERBOSE_LEVEL).Infof("Service() service: %s", name)
 	if services, err := r.Services(); err != nil {
-		glog.Errorf("Service() failed to find services for service: %s, error: %s", name, err)
+		glog.Errorf("Service() failed to find service: %s, error: %s", name, err)
 		return Service{}, err
 	} else {
 		for _, service := range services {

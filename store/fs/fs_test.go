@@ -24,7 +24,7 @@ import (
 
 var (
 	fsStore FileStore
-	tmpDir string
+	tmpDir  string
 )
 
 func testPath(path string) string {
@@ -32,7 +32,7 @@ func testPath(path string) string {
 }
 
 func checkExists(path string, t *testing.T) bool {
-	if _, err := os.Stat(path); err != nil  {
+	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return false
 		}

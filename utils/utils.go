@@ -20,7 +20,7 @@ import (
 	"github.com/golang/glog"
 )
 
-func Attempt(method func() (interface {}, error), attempts, interval int) (interface {},error) {
+func Attempt(method func() (interface{}, error), attempts, interval int) (interface{}, error) {
 	for i := 0; i < attempts; i++ {
 		result, err := method()
 		if err != nil {
