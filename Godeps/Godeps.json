@@ -4,13 +4,13 @@
 	"Deps": [
 		{
 			"ImportPath": "github.com/coreos/go-etcd/etcd",
-			"Comment": "v0.2.0-rc1-130-g6aa2da5",
-			"Rev": "6aa2da5a7a905609c93036b9307185a04a5a84a5"
+			"Comment": "v2.0.0-18-gc904d70",
+			"Rev": "c904d7032a70da6551c43929f199244f6a45f4c1"
 		},
 		{
 			"ImportPath": "github.com/go-fsnotify/fsnotify",
-			"Comment": "v1.1.0-5-gfce2f57",
-			"Rev": "fce2f578c95fca3b36b52673724083defe4e0c72"
+			"Comment": "v1.2.0-1-g6549b98",
+			"Rev": "6549b98005f3e4026ad9f50ef7d5011f40ba1397"
 		},
 		{
 			"ImportPath": "github.com/golang/glog",
@@ -18,8 +18,8 @@
 		},
 		{
 			"ImportPath": "github.com/hashicorp/consul/api",
-			"Comment": "v0.5.0-94-g8ccc23b",
-			"Rev": "8ccc23beff28e42b7e4937c74f0b548a5203db93"
+			"Comment": "v0.5.2-159-gc34bcb4",
+			"Rev": "c34bcb45c670af076846826ea72c436fbd0e2c35"
 		},
 		{
 			"ImportPath": "github.com/ugorji/go/codec",
