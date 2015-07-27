@@ -13,7 +13,7 @@ build:
 	godep go build -o stage/${NAME}
 
 docker: build
-	docker build -t ${AUTHOR}/${NAME} .
+	sudo docker build -t ${AUTHOR}/${NAME} .
 
 clean:
 	rm -f ./stage/${NAME}

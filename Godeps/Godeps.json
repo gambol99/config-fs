@@ -1,17 +1,7 @@
 {
 	"ImportPath": "github.com/gambol99/config-fs",
-	"GoVersion": "go1.3.3",
+	"GoVersion": "go1.4.2",
 	"Deps": [
-		{
-			"ImportPath": "github.com/coreos/etcd/etcdserver/etcdhttp/httptypes",
-			"Comment": "v2.0.0-55-g766e0ad",
-			"Rev": "766e0ad901ad089426ae9a5e40a8ec899b3b4076"
-		},
-		{
-			"ImportPath": "github.com/coreos/etcd/pkg/types",
-			"Comment": "v2.0.0-55-g766e0ad",
-			"Rev": "766e0ad901ad089426ae9a5e40a8ec899b3b4076"
-		},
 		{
 			"ImportPath": "github.com/coreos/go-etcd/etcd",
 			"Comment": "v0.2.0-rc1-130-g6aa2da5",
@@ -30,6 +20,10 @@
 			"ImportPath": "github.com/hashicorp/consul/api",
 			"Comment": "v0.5.0-94-g8ccc23b",
 			"Rev": "8ccc23beff28e42b7e4937c74f0b548a5203db93"
+		},
+		{
+			"ImportPath": "github.com/ugorji/go/codec",
+			"Rev": "821cda7e48749cacf7cad2c6ed01e96457ca7e9d"
 		}
 	]
 }
